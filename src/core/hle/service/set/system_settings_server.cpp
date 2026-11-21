@@ -376,6 +376,21 @@ bool ISystemSettingsServer::LoadSettingsFile(std::filesystem::path& path, auto&&
     }
 
     auto settings_file = path / "settings.dat";
+#ifdef __SWITCH__
+    // A crash between the remove and the rename of a save (see Save) left only the
+    // finished temporary file; promote it instead of resetting to defaults.
+    {
+        auto settings_tmp_file = settings_file;
+        settings_tmp_file = settings_tmp_file.replace_extension("tmp");
+        std::error_code tmp_ec;
+        if (!std::filesystem::exists(settings_file, tmp_ec) &&
+            std::filesystem::exists(settings_tmp_file, tmp_ec) &&
+            std::filesystem::file_size(settings_tmp_file, tmp_ec) ==
+                sizeof(SettingsHeader) + sizeof(settings_type)) {
+            std::filesystem::rename(settings_tmp_file, settings_file, tmp_ec);
+        }
+    }
+#endif
     auto exists = std::filesystem::exists(settings_file);
     auto file_size_ok = exists && std::filesystem::file_size(settings_file) ==
                                       sizeof(SettingsHeader) + sizeof(settings_type);
