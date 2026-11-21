@@ -93,7 +93,7 @@ void ApplyHostDefaults() {
     Settings::values.log_flush_line.SetValue(true);
 
     // Optional log filter for diagnosis, e.g. "*:Info Service.NVDRV:Debug".
-    if (std::ifstream filter_file{"sdmc:/switch/eden/log_filter.txt"}) {
+    if (std::ifstream filter_file{"sdmc:/switch/avalon/log_filter.txt"}) {
         std::string filter;
         std::getline(filter_file, filter);
         while (!filter.empty() && std::isspace(static_cast<unsigned char>(filter.back()))) {
@@ -110,7 +110,7 @@ void ApplyHostDefaults() {
     player.controller_type = Settings::ControllerType::ProController;
 }
 
-constexpr const char* SettingsFile = "sdmc:/switch/eden/settings.txt";
+constexpr const char* SettingsFile = "sdmc:/switch/avalon/settings.txt";
 
 /// The settings the picker's options screen offers, at their defaults.
 std::vector<Platform::MenuOption> DefaultOptions() {
@@ -191,7 +191,7 @@ std::string GameName(const std::string& game_path) {
 }
 
 std::string GameSettingsFile(const std::string& game_path) {
-    return "sdmc:/switch/eden/games/" + GameName(game_path) + ".txt";
+    return "sdmc:/switch/avalon/games/" + GameName(game_path) + ".txt";
 }
 
 /// Reads "name=value" lines over the values `options` has.
@@ -245,7 +245,7 @@ std::vector<Platform::MenuOption> GameOptions(const std::vector<Platform::MenuOp
 /// Writes only what the game does not inherit.
 void SaveGameOptions(const std::vector<Platform::MenuOption>& options,
                      const std::string& game_path) {
-    mkdir("sdmc:/switch/eden/games", 0777);
+    mkdir("sdmc:/switch/avalon/games", 0777);
     const std::string path = GameSettingsFile(game_path);
     if (std::ranges::all_of(options, [](const auto& option) { return option.selected == 0; })) {
         std::remove(path.c_str());
@@ -558,7 +558,7 @@ struct MotionPeaks {
 
 int main(int argc, char** argv) {
     // Eden derives its data, config and cache directories from $HOME.
-    setenv("HOME", "sdmc:/switch/eden", 0);
+    setenv("HOME", "sdmc:/switch/avalon", 0);
 
     ApplyHostDefaults();
 
@@ -597,13 +597,13 @@ int main(int argc, char** argv) {
     if (OptionIs(options, "jit_cache", "on")) {
         // Named after the game file: the cores' JITs are made before the title is known.
         const std::string name = GameName(game_path);
-        mkdir("sdmc:/switch/eden/jit", 0777);
+        mkdir("sdmc:/switch/avalon/jit", 0777);
         std::snprintf(eden_horizon_jit_cache_prefix, sizeof(eden_horizon_jit_cache_prefix),
-                      "sdmc:/switch/eden/jit/%.60s_%s", name.c_str(),
+                      "sdmc:/switch/avalon/jit/%.60s_%s", name.c_str(),
                       OptionValue(options, "address_space").c_str());
     }
     // Tuning aid: a number in this file replaces how far the JIT compiles ahead.
-    if (std::ifstream ahead{"sdmc:/switch/eden/jit_ahead.txt"}; ahead) {
+    if (std::ifstream ahead{"sdmc:/switch/avalon/jit_ahead.txt"}; ahead) {
         int blocks = 0;
         if (ahead >> blocks && blocks >= 0 && blocks <= 64) {
             eden_horizon_jit_blocks_ahead = blocks;

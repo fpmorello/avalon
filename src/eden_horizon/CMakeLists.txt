@@ -28,11 +28,11 @@ target_compile_options(eden-horizon PRIVATE
     -Wno-conversion -Wno-unused-variable -Wno-unused-parameter -Wno-missing-field-initializers)
 
 nx_generate_nacp(
-    OUTPUT eden.nacp
-    NAME "Eden"
+    OUTPUT avalon.nacp
+    NAME "Avalon"
     AUTHOR "Eden Emulator Project"
     VERSION "0.0.0-poc")
 
 nx_create_nro(eden-horizon
-    OUTPUT ${CMAKE_BINARY_DIR}/bin/eden.nro
-    NACP eden.nacp)
+    OUTPUT ${CMAKE_BINARY_DIR}/bin/avalon.nro
+    NACP avalon.nacp)

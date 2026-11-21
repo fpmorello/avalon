@@ -31,7 +31,7 @@ MemoryStats GetMemoryStats();
 /// Bit N set: this process may run threads on CPU core N.
 std::uint64_t GetCoreMask();
 
-/// Diagnostic, run when sdmc:/switch/eden/test_exception.txt exists (the file is
+/// Diagnostic, run when sdmc:/switch/avalon/test_exception.txt exists (the file is
 /// removed first): faults on purpose to learn whether the exception handler above
 /// receives CPU exceptions in this environment. It writes crash.txt if it does.
 /// Does not return when the test runs.

@@ -15,4 +15,4 @@
 
 /// Full form for logs and crash reports.
 #define EDEN_HORIZON_VERSION \
-    "eden switch2 fork " EDEN_HORIZON_BUILD " (" EDEN_HORIZON_BUILD_DATE ")"
+    "Avalon (eden switch2 fork) " EDEN_HORIZON_BUILD " (" EDEN_HORIZON_BUILD_DATE ")"

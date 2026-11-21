@@ -53,14 +53,14 @@ Known limits:
 
 ## Using it
 
-1. Copy `eden.nro` to `sdmc:/switch/`.
-2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/eden/.local/share/eden/keys/`.
+1. Copy `avalon.nro` to `sdmc:/switch/`.
+2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/avalon/.local/share/eden/keys/`.
 3. Start it from the homebrew menu and choose a game file. **X** opens the options for
    every game, and **Y** the options of the game under the cursor, which start out
    inheriting the general ones.
 4. Hold **+** and **−** together to leave the game.
 
-The log is written to `sdmc:/switch/eden/.local/share/eden/log/eden_log.txt`.
+The log is written to `sdmc:/switch/avalon/.local/share/eden/log/eden_log.txt`.
 
 No games, keys or firmware are included, and none will be provided.
 
@@ -73,7 +73,7 @@ sh tools/switch2/configure.sh
 sh tools/switch2/build.sh eden-horizon_nro
 ```
 
-The result is `build/switch2/bin/eden.nro`. The port's own code is in `src/eden_horizon`
+The result is `build/switch2/bin/avalon.nro`. The port's own code is in `src/eden_horizon`
 and `src/common/horizon`; the rest are changes guarded by `__SWITCH__` or `HORIZON_HOST`.
 
 This port was written with the help of an AI coding assistant.

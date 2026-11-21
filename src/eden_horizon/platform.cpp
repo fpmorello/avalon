@@ -27,7 +27,7 @@ u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
 
 void __libnx_exception_handler(ThreadExceptionDump* ctx) {
     const u64 base = reinterpret_cast<u64>(__start__);
-    std::FILE* const file = std::fopen("sdmc:/switch/eden/crash.txt", "w");
+    std::FILE* const file = std::fopen("sdmc:/switch/avalon/crash.txt", "w");
     if (file == nullptr) {
         return;
     }
@@ -96,14 +96,14 @@ std::uint64_t GetCoreMask() {
 }
 
 void RunExceptionTestIfRequested() {
-    constexpr const char* RequestFile = "sdmc:/switch/eden/test_exception.txt";
+    constexpr const char* RequestFile = "sdmc:/switch/avalon/test_exception.txt";
     std::FILE* const request = std::fopen(RequestFile, "r");
     if (request == nullptr) {
         return;
     }
     std::fclose(request);
     std::remove(RequestFile);
-    std::remove("sdmc:/switch/eden/crash.txt");
+    std::remove("sdmc:/switch/avalon/crash.txt");
 
     volatile int* const invalid = nullptr;
     *invalid = 1;
@@ -239,7 +239,7 @@ bool PumpEvents(PadSnapshot& out) {
 
 namespace {
 
-constexpr const char* LastFolderFile = "sdmc:/switch/eden/last_folder.txt";
+constexpr const char* LastFolderFile = "sdmc:/switch/avalon/last_folder.txt";
 constexpr const char* RootFolder = "sdmc:/";
 constexpr int VisibleRows = 36;
 constexpr std::size_t NameColumns = 74;
@@ -325,7 +325,7 @@ void WriteLastFolder(const std::string& folder) {
 
 void Draw(const std::string& folder, const std::vector<Entry>& entries, int selected, int top) {
     std::printf("\x1b[2J\x1b[1;1H");
-    std::printf("\x1b[1mEden\x1b[0m - choose a game\n");
+    std::printf("\x1b[1mAvalon\x1b[0m - choose a game\n");
     std::printf("%.*s\n\n", static_cast<int>(NameColumns + 4), folder.c_str());
     if (entries.empty()) {
         std::printf("  (no folders or games here)\n");
@@ -354,7 +354,7 @@ void Draw(const std::string& folder, const std::vector<Entry>& entries, int sele
 
 void DrawOptions(const std::vector<MenuOption>& options, int selected, const std::string& title) {
     std::printf("\x1b[2J\x1b[1;1H");
-    std::printf("\x1b[1mEden %s\x1b[0m - %.60s\n\n\n", EDEN_HORIZON_BUILD_ID, title.c_str());
+    std::printf("\x1b[1mAvalon %s\x1b[0m - %.60s\n\n\n", EDEN_HORIZON_BUILD_ID, title.c_str());
     for (int row = 0; row < static_cast<int>(options.size()); ++row) {
         const MenuOption& option = options[static_cast<std::size_t>(row)];
         const char* const choice = option.choices[static_cast<std::size_t>(option.selected)].c_str();
