@@ -43,6 +43,7 @@
 #include "eden_horizon/platform.h"
 #include "eden_horizon/profiler.h"
 #include "eden_horizon/status_overlay.h"
+#include "eden_horizon/version.h"
 #include "hid_core/frontend/emulated_controller.h"
 #include "hid_core/hid_core.h"
 #include "hid_core/hid_types.h"
@@ -568,6 +569,7 @@ int main(int argc, char** argv) {
     Common::Log::Initialize();
     Common::Log::Start();
     std::set_terminate(OnTerminate);
+    LOG_INFO(Frontend, "{}", EDEN_HORIZON_VERSION);
     LOG_INFO(Frontend, "CPU cores available to this process: mask {:#x}", Platform::GetCoreMask());
     Common::Log::Stop(); // flush before the optional fault below
     Platform::RunExceptionTestIfRequested();

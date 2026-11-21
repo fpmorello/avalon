@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "eden_horizon/platform.h"
+#include "eden_horizon/version.h"
 
 #include <algorithm>
 #include <cctype>
@@ -30,6 +31,7 @@ void __libnx_exception_handler(ThreadExceptionDump* ctx) {
     if (file == nullptr) {
         return;
     }
+    std::fprintf(file, "%s\n", EDEN_HORIZON_VERSION);
     std::fprintf(file, "error_desc: 0x%x\n", ctx->error_desc);
     std::fprintf(file, "esr: 0x%x\n", ctx->esr);
     std::fprintf(file, "far: 0x%lx\n", ctx->far.x);
@@ -352,7 +354,7 @@ void Draw(const std::string& folder, const std::vector<Entry>& entries, int sele
 
 void DrawOptions(const std::vector<MenuOption>& options, int selected, const std::string& title) {
     std::printf("\x1b[2J\x1b[1;1H");
-    std::printf("\x1b[1mEden\x1b[0m - %.60s\n\n\n", title.c_str());
+    std::printf("\x1b[1mEden %s\x1b[0m - %.60s\n\n\n", EDEN_HORIZON_BUILD_ID, title.c_str());
     for (int row = 0; row < static_cast<int>(options.size()); ++row) {
         const MenuOption& option = options[static_cast<std::size_t>(row)];
         const char* const choice = option.choices[static_cast<std::size_t>(option.selected)].c_str();

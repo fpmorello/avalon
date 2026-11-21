@@ -11,7 +11,8 @@ add_executable(eden-horizon
     profiler.cpp
     profiler.h
     status_overlay.cpp
-    status_overlay.h)
+    status_overlay.h
+    version.h)
 
 target_link_libraries(eden-horizon PRIVATE common core hid_core input_common frontend_common video_core)
 target_link_libraries(eden-horizon PRIVATE OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
