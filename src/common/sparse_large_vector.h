@@ -155,6 +155,10 @@ public:
         if (T* chunk = EnsureChunk(index); chunk != nullptr) {
             MarkPageCommitted(index);
             chunk[EntryInChunk(index)] = value;
+        } else {
+            LOG_ERROR(Common_Memory,
+                      "Dropping write to SparseLargeVector index {}: out of memory for its chunk",
+                      index);
         }
 #else
         if (IsCommittedPage(index) || CommitPage(index))
