@@ -67,6 +67,7 @@ public:
         , polyfill_options(GenPolyfillOptions(block_of_code))
     {
         ASSERT(conf.page_table_address_space_bits >= 12 && conf.page_table_address_space_bits <= 64);
+        ASSERT_MSG(!conf.page_table_level2_bits, "two-level page tables need the arm64 backend");
     }
 
     ~Impl() = default;

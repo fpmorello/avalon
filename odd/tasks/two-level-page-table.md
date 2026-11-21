@@ -19,10 +19,13 @@ builds again. Branch `feat/two-level-page-table` off `switch2-poc` in `fpmorello
 
 - T1 (S1, inline): `SparseLargeVector` chunked backing: every unmaterialized directory slot points
   to one shared read-only zero chunk (never null); expose the directory and chunk index bits for
-  the JIT; RED/GREEN host test via `tools/switch2/tests/run.sh`. Commit: pending.
+  the JIT; RED/GREEN host test via `tools/switch2/tests/run.sh`. DONE: commit aad080bb58.
+  RED = only "no member named 'ChunkIndexBits'/'ChunkDirectory'"; GREEN = sparse_directory_test
+  + sparse_chunked/sparse_host_behavior/jit_eviction tests all pass (ASan + TSan).
 - T2 (S1, inline): dynarmic arm64: optional two-level page table config (A64 + A32 UserConfig ->
   EmitConfig), two-level `InlinePageTableEmitVAddrLookup`; other backends reject the option.
-  Commit: pending.
+  DONE: commit below (see git log). Check: `ninja dynarmic` for Switch 2 builds clean; no host
+  RED possible (x86_64, no qemu) — runtime proof is T4's on-device self-test.
 - T3 (S1, S3, inline): `arm_dynarmic_64/32.cpp` pass the directory on `__SWITCH__`; full NRO build
   green. Commit: pending.
 - T4 (S2, inline): on-device self-test triggered by `sdmc:/switch/avalon/test_pagetable.txt`

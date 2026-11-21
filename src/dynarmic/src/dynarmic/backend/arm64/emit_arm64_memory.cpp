@@ -268,10 +268,23 @@ std::pair<oaknut::XReg, oaknut::XReg> InlinePageTableEmitVAddrLookup(oaknut::Cod
         code.B(NE, *fallback);
     }
 
-    // index = index << log2
-    code.LSL(Xscratch0, Xscratch0, ctx.conf.page_table_log2_stride);
-    // load x0 = *<(u8*)pagetable + index>
-    code.LDR(Xscratch0, Xpagetable, Xscratch0);
+    if (ctx.conf.page_table_level2_bits) {
+        // Two-level table: Xpagetable holds a directory of second-level table pointers.
+        const std::size_t level2_bits = *ctx.conf.page_table_level2_bits;
+        // x1 = directory[index >> level2_bits]
+        code.LSR(Xscratch1, Xscratch0, level2_bits);
+        code.LDR(Xscratch1, Xpagetable, Xscratch1, oaknut::IndexExt::LSL, 3);
+        // index = (index & level2_mask) << log2
+        code.UBFX(Xscratch0, Xscratch0, 0, level2_bits);
+        code.LSL(Xscratch0, Xscratch0, ctx.conf.page_table_log2_stride);
+        // load x0 = *<(u8*)x1 + index>; ordered after the directory load by the address dependency
+        code.LDR(Xscratch0, Xscratch1, Xscratch0);
+    } else {
+        // index = index << log2
+        code.LSL(Xscratch0, Xscratch0, ctx.conf.page_table_log2_stride);
+        // load x0 = *<(u8*)pagetable + index>
+        code.LDR(Xscratch0, Xpagetable, Xscratch0);
+    }
 
     if (ctx.conf.page_table_marked_bit) {
         code.TST(Xscratch0, 1ULL << *ctx.conf.page_table_marked_bit);

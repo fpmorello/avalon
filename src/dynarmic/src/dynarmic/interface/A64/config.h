@@ -187,6 +187,14 @@ struct UserConfig {
     /// Useful for compacting bits into the page table and should be used as part of `page_table_pointer_mask`.
     std::optional<std::uint8_t> page_table_sign_extension = std::nullopt;
 
+    /// If this value is set, page_table points to a directory of pointers to second-level
+    /// tables instead of one flat table: the entry of page index p is read from
+    /// directory[p >> page_table_level2_bits][p & ((1 << page_table_level2_bits) - 1)].
+    /// Every directory slot inside the address space must point to a readable table (a
+    /// shared all-zero table for unmapped ranges); only the entries are checked for null.
+    /// Supported by the arm64 backend only.
+    std::optional<std::uint8_t> page_table_level2_bits = std::nullopt;
+
     /// Counter-timer frequency register. The value of the register is not interpreted by
     /// dynarmic.
     std::uint32_t cntfrq_el0 = 600000000;

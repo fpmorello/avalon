@@ -69,7 +69,9 @@ struct Jit::Impl {
         , polyfill_options(GenPolyfillOptions(block_of_code))
         , conf(std::move(conf))
         , jit_interface(jit)
-    {}
+    {
+        ASSERT_MSG(!this->conf.page_table_level2_bits, "two-level page tables need the arm64 backend");
+    }
 
     ~Impl() = default;
 
