@@ -49,6 +49,17 @@ void* AllocateMemoryPages(std::size_t size) noexcept;
 void FreeMemoryPages(void* base, std::size_t size) noexcept;
 void DecommitVectorPage(uintptr_t base) noexcept;
 
+#ifdef EDEN_SPARSE_CHUNKED_BACKING
+/// Bytes of one chunk of the chunked backing.
+inline constexpr std::size_t SparseChunkBytes = 2 * 1024 * 1024;
+
+/// One all-zero chunk shared by every vector: each directory slot whose chunk is not
+/// materialized points here, so dynarmic's two-level page table lookup can load through
+/// any slot without a null check (odd/tasks/two-level-page-table.md). Never written; it
+/// lives in .bss, so it costs no file size.
+alignas(64) inline u8 SparseZeroChunk[SparseChunkBytes];
+#endif
+
 #if defined(EDEN_CHUNKED_SPARSE_VECTOR)
 // Test-only instrumentation for tools/switch2/tests; never compiled into the NRO.
 inline std::atomic<std::size_t> SparseTestChunksLive{0};
@@ -239,6 +250,22 @@ public:
     static constexpr std::size_t ChunkEntriesPerChunk() noexcept {
         return ChunkBytes / sizeof(T);
     }
+
+    /// log2 of the entries per chunk: entry i lives at ChunkDirectory()[i >> bits][i & mask].
+    static constexpr std::size_t ChunkIndexBits() noexcept {
+        static_assert(std::has_single_bit(ChunkBytes / sizeof(T)),
+                      "two-level lookup needs a power-of-two number of entries per chunk");
+        return std::countr_zero(ChunkBytes / sizeof(T));
+    }
+
+    /// The chunk directory, for lookups that bypass this class (dynarmic's JIT). Every slot
+    /// points to readable memory: its chunk, or the shared zero chunk. The array is stable
+    /// until ResizeAndClear or destruction.
+    [[nodiscard]] const T* const* ChunkDirectory() const noexcept {
+        static_assert(sizeof(std::atomic<T*>) == sizeof(T*) && std::atomic<T*>::is_always_lock_free,
+                      "the directory is read as a plain pointer array");
+        return reinterpret_cast<const T* const*>(chunk_map);
+    }
 #endif
 
     T& GetUnchecked(size_t index) {
@@ -324,7 +351,7 @@ private:
 #ifdef EDEN_SPARSE_CHUNKED_BACKING
     /// Chunk size in bytes; a multiple of every supported host page size, so a host
     /// page never straddles two chunks.
-    static constexpr std::size_t ChunkBytes = 2 * 1024 * 1024;
+    static constexpr std::size_t ChunkBytes = SparseChunkBytes;
     static_assert(ChunkBytes % (64 * 1024) == 0, "chunk must hold whole host pages");
 
     std::size_t chunk_count{};
@@ -336,24 +363,32 @@ private:
     std::size_t EntryInChunk(std::size_t index) const noexcept {
         return ((index * sizeof(T)) % ChunkBytes) / sizeof(T);
     }
+    static T* ZeroChunk() noexcept {
+        return reinterpret_cast<T*>(SparseZeroChunk);
+    }
+    /// The materialized chunk holding index, or nullptr if it has none.
     T* ChunkSlotRead(std::size_t index) const noexcept {
-        return chunk_map[ChunkSlotOf(index)].load(std::memory_order_acquire);
+        T* const chunk = chunk_map[ChunkSlotOf(index)].load(std::memory_order_acquire);
+        return chunk == ZeroChunk() ? nullptr : chunk;
     }
     /// Materializes the chunk holding index. Exactly one thread's allocation is
     /// published per slot; the others reuse the winner's chunk.
     T* EnsureChunk(std::size_t index) noexcept {
         const std::size_t slot = ChunkSlotOf(index);
-        if (T* chunk = chunk_map[slot].load(std::memory_order_acquire)) {
+        if (T* chunk = chunk_map[slot].load(std::memory_order_acquire); chunk != ZeroChunk()) {
             return chunk;
         }
         T* const fresh = static_cast<T*>(std::calloc(ChunkBytes, 1));
-#if defined(EDEN_CHUNKED_SPARSE_VECTOR)
-        if (fresh != nullptr) {
-            SparseTestChunksAllocated.fetch_add(1, std::memory_order_relaxed);
-            SparseTestChunksLive.fetch_add(1, std::memory_order_relaxed);
+        if (fresh == nullptr) {
+            return nullptr;
         }
+#if defined(EDEN_CHUNKED_SPARSE_VECTOR)
+        SparseTestChunksAllocated.fetch_add(1, std::memory_order_relaxed);
+        SparseTestChunksLive.fetch_add(1, std::memory_order_relaxed);
 #endif
-        T* expected = nullptr;
+        // Release publishes the zeroed chunk to the JIT, whose address-dependent load of
+        // the entry through the slot is ordered after the load of the slot.
+        T* expected = ZeroChunk();
         if (chunk_map[slot].compare_exchange_strong(expected, fresh, std::memory_order_acq_rel)) {
             return fresh;
         }
@@ -371,7 +406,7 @@ private:
         chunk_count = (alloc_size + ChunkBytes - 1) / ChunkBytes;
         chunk_map = new std::atomic<T*>[chunk_count];
         for (std::size_t i = 0; i < chunk_count; ++i) {
-            chunk_map[i].store(nullptr, std::memory_order_relaxed);
+            chunk_map[i].store(ZeroChunk(), std::memory_order_relaxed);
         }
     }
     void FreeChunkedBacking() noexcept {
@@ -379,12 +414,13 @@ private:
             return;
         }
         for (std::size_t i = 0; i < chunk_count; ++i) {
-            void* chunk = chunk_map[i].exchange(nullptr, std::memory_order_acquire);
+            T* const chunk = chunk_map[i].exchange(ZeroChunk(), std::memory_order_acquire);
+            if (chunk == ZeroChunk()) {
+                continue;
+            }
             std::free(chunk);
 #if defined(EDEN_CHUNKED_SPARSE_VECTOR)
-            if (chunk != nullptr) {
-                SparseTestChunksLive.fetch_sub(1, std::memory_order_relaxed);
-            }
+            SparseTestChunksLive.fetch_sub(1, std::memory_order_relaxed);
 #endif
         }
         delete[] chunk_map;
