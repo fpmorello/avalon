@@ -40,6 +40,7 @@
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
 #include "core/perf_stats.h"
+#include "eden_horizon/pagetable_selftest.h"
 #include "eden_horizon/platform.h"
 #include "eden_horizon/profiler.h"
 #include "eden_horizon/status_overlay.h"
@@ -573,6 +574,7 @@ int main(int argc, char** argv) {
     LOG_INFO(Frontend, "CPU cores available to this process: mask {:#x}", Platform::GetCoreMask());
     Common::Log::Stop(); // flush before the optional fault below
     Platform::RunExceptionTestIfRequested();
+    PageTableSelfTest::RunIfRequested();
     LOG_INFO(Frontend, "Eden {} | {}-{} (Horizon host)", std::string_view{Common::g_build_name},
              std::string_view{Common::g_scm_branch}, std::string_view{Common::g_scm_desc});
 

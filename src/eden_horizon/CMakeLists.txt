@@ -6,6 +6,8 @@ string(APPEND CMAKE_CXX_STANDARD_LIBRARIES " -ldav1d -lz")
 
 add_executable(eden-horizon
     main.cpp
+    pagetable_selftest.cpp
+    pagetable_selftest.h
     platform.cpp
     platform.h
     profiler.cpp
@@ -15,6 +17,8 @@ add_executable(eden-horizon
     version.h)
 
 target_link_libraries(eden-horizon PRIVATE common core hid_core input_common frontend_common video_core)
+# The page table self-test drives dynarmic directly.
+target_link_libraries(eden-horizon PRIVATE dynarmic::dynarmic)
 target_link_libraries(eden-horizon PRIVATE OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 
 # OunceVK (Vulkan driver, static) and kaiHEN's JIT provider for libounce's Jit API.

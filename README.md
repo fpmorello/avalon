@@ -43,8 +43,9 @@ Known limits:
 - No fastmem and no NCE: kaiHEN does not hand CPU exceptions to homebrew, so every guest
   memory access goes through the page table.
 - Memory is tight. The emulator, the guest's 4 GiB and the GPU share one heap of about
-  9 GiB, and long sessions can still run out. The guest page table is committed on
-  demand (chunked backing) and the JIT drops its oldest blocks before clearing a whole
+  9 GiB, and long sessions can still run out. The guest page table is allocated on
+  demand in 2 MiB chunks, which the JIT reads through a two-level lookup (one extra load
+  per guest memory access), and the JIT drops its oldest blocks before clearing a whole
   cache, but a full clear remains the last resort.
 - New guest code stutters while it is compiled. The CPU code cache removes most of it from
   the second session of a game on, at the cost of a longer start.
@@ -61,6 +62,13 @@ Known limits:
 4. Hold **+** and **−** together to leave the game.
 
 The log is written to `sdmc:/switch/avalon/.local/share/eden/log/eden_log.txt`.
+
+To check the JIT's two-level page table lookup on your console, create an empty file
+`sdmc:/switch/avalon/test_pagetable.txt` and start the emulator. The file is removed, a
+short A64 and A32 test runs before the game list, and the result is written to
+`sdmc:/switch/avalon/test_pagetable_result.txt`: one PASS/FAIL line per check and
+`RESULT PASS` or `RESULT FAIL` at the end. If the file only says `running`, the test
+crashed the emulator.
 
 No games, keys or firmware are included, and none will be provided.
 

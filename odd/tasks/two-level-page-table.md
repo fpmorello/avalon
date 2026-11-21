@@ -30,7 +30,8 @@ builds again. Branch `feat/two-level-page-table` off `switch2-poc` in `fpmorello
   green. DONE: full `tools/switch2/build.sh` exit 0, built avalon-b1.nro (42604741 bytes).
 - T4 (S2, inline): on-device self-test triggered by `sdmc:/switch/avalon/test_pagetable.txt`
   (A64 + A32 JIT loads/stores through the two-level table, PASS/FAIL file); README docs.
-  Commit: pending.
+  DONE: src/eden_horizon/pagetable_selftest.{h,cpp}, hooked after RunExceptionTestIfRequested;
+  NRO build exit 0 (avalon-b1.nro 42617029 bytes). Device run pending (user).
 - T5 (S1-S3, gentle-ai-verify): independent verification (high risk: JIT memory path,
   concurrency); device run of S2 is the user's. Commit: n/a.
 
