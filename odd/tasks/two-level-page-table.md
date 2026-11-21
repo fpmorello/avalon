@@ -33,7 +33,10 @@ builds again. Branch `feat/two-level-page-table` off `switch2-poc` in `fpmorello
   DONE: src/eden_horizon/pagetable_selftest.{h,cpp}, hooked after RunExceptionTestIfRequested;
   NRO build exit 0 (avalon-b1.nro 42617029 bytes). Device run pending (user).
 - T5 (S1-S3, gentle-ai-verify): independent verification (high risk: JIT memory path,
-  concurrency); device run of S2 is the user's. Commit: n/a.
+  concurrency); device run of S2 is the user's. DONE: no blockers; S1 UNPROVEN, S2 UNPROVEN
+  (need device run), S3 PASS. Added its suggested last-slot regression test. Open nits: zero chunk
+  is writable .bss (2 MiB), A32 fallback tag low bits are zero, self-test skips the last slot and
+  always sets sign extension, riscv64/loongarch64 do not reject the option.
 
 ## Log
 

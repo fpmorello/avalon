@@ -136,6 +136,18 @@ void TestResizeResetsDirectory() {
     CHECK(ChunkIsZero(zero));
 }
 
+void TestDirectoryCoversEveryPageIndex() {
+    // 32/36/38/39-bit tables with 4 KiB pages: the JIT's last level-1 index must be in range.
+    for (std::size_t bits : {32u, 36u, 38u, 39u}) {
+        const std::size_t entries = std::size_t{1} << (bits - 12);
+        Vector v(entries);
+        v.Set(entries - 1, 0x77);
+        CHECK(JitRead(v, entries - 1) == 0x77);
+        CHECK(JitRead(v, entries - 2) == 0);
+    }
+    CHECK(Common::SparseTestStats::ChunksLive() == 0);
+}
+
 } // namespace
 
 int main() {
@@ -144,6 +156,7 @@ int main() {
     TestWritesAreVisibleThroughDirectory();
     TestZeroRegionClearsThroughDirectory();
     TestResizeResetsDirectory();
+    TestDirectoryCoversEveryPageIndex();
     CHECK(Common::SparseTestStats::ChunksLive() == 0);
     if (failures != 0) {
         std::printf("sparse_directory_test: %d check(s) failed\n", failures);
