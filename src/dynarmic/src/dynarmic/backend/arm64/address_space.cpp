@@ -35,6 +35,7 @@
 #    include <vector>
 
 #    include "common/horizon/stats.h"
+#    include "dynarmic/backend/arm64/jit_eviction.h"
 #endif
 
 namespace Dynarmic::Backend::Arm64 {
@@ -279,8 +280,14 @@ CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     constexpr std::size_t MinBlocksToDrop = 16384;
     if ((++emits_since_heap_check & 0x3FF) == 0 && block_infos.size() >= MinBlocksToDrop &&
         HeapIsRunningLow()) {
-        __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
-        ClearCache();
+        // Throwing the whole cache away recompiles everything the game runs next; drop
+        // the oldest quarter first and keep the full clear as the fallback.
+        constexpr unsigned MaxEvictionsBeforeClear = 2;
+        if (evictions_since_clear >= MaxEvictionsBeforeClear ||
+            EvictOldestBlocks(EvictBlockCount(block_infos.size())) == 0) {
+            __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
+            ClearCache();
+        }
     }
 #endif
     GenerateIR(ir_block, descriptor);
@@ -353,9 +360,9 @@ void AddressSpace::ClearCache() {
 #ifdef __SWITCH__
     __atomic_fetch_sub(&eden_horizon_jit_blocks, block_infos.size(), __ATOMIC_RELAXED);
     __atomic_fetch_add(&eden_horizon_jit_cache_clears, 1, __ATOMIC_RELAXED);
-#endif
-#ifdef __SWITCH__
     ClearLookupCache();
+    emission_order.clear();
+    evictions_since_clear = 0;
 #endif
     block_entries.clear();
     reverse_block_entries.clear();
@@ -363,6 +370,45 @@ void AddressSpace::ClearCache() {
     block_references.clear();
     code.set_offset(prelude_info.end_of_prelude);
 }
+
+#ifdef __SWITCH__
+std::size_t AddressSpace::EvictOldestBlocks(std::size_t count) {
+    if (count == 0) {
+        return 0;
+    }
+    UnprotectCodeMemory();
+    std::size_t evicted = 0;
+    while (evicted < count && !emission_order.empty()) {
+        const IR::LocationDescriptor descriptor = emission_order.front();
+        emission_order.pop_front();
+        const auto iter = block_entries.find(descriptor);
+        if (iter == block_entries.end()) {
+            // Invalidated earlier; its bookkeeping outside block_entries is released by
+            // the next full clear.
+            continue;
+        }
+        const CodePtr entry_point = iter->second;
+        // Same teardown as InvalidateBasicBlocks — unlink the referencers to the
+        // dispatcher first — plus the per-block maps a full clear frees: they are the
+        // memory this eviction exists to release. The emitted code itself is left
+        // alone (the cursor is not rewound), so a core executing it runs on undisturbed.
+        RelinkForDescriptor(descriptor, nullptr);
+        block_infos.erase(entry_point);
+        reverse_block_entries.erase(entry_point);
+        block_references.erase(descriptor);
+        block_entries.erase(iter);
+        lookup_cache[LookupIndex(descriptor.Value())] = {};
+        ++evicted;
+    }
+    ProtectCodeMemory();
+    if (evicted != 0) {
+        ++evictions_since_clear;
+        __atomic_fetch_sub(&eden_horizon_jit_blocks, evicted, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&eden_horizon_jit_partial_evictions, evicted, __ATOMIC_RELAXED);
+    }
+    return evicted;
+}
+#endif
 
 std::size_t AddressSpace::GetRemainingSize() {
     return code_cache_size - static_cast<std::size_t>(code.offset());
@@ -382,6 +428,7 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
 #ifdef __SWITCH__
     __atomic_fetch_add(&eden_horizon_jit_blocks, 1, __ATOMIC_RELAXED);
+    emission_order.push_back(block.Location());
 #endif
 
     Link(block_info);

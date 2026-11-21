@@ -33,9 +33,13 @@ documented for Windows/MSYS2, unavailable here).
 ## Tasks
 
 - T1 (S1, inline): Standalone test harness `tools/switch2/tests/` + RED test for chunked
-  `SparseLargeVector` (compile-selected via `EDEN_CHUNKED_SPARSE_VECTOR`). Evidence: RED run log.
+  `SparseLargeVector` (compile-selected via `EDEN_CHUNKED_SPARSE_VECTOR`). Evidence: RED run —
+  only errors were `no member named 'SparseTestStats'` (missing backend). DONE.
 - T2 (S1, inline): Implement chunked backing in `src/common/sparse_large_vector.h`; GREEN test;
-  commit C1 "common: on-demand chunked backing for SparseLargeVector on Switch 2".
+  commit C1 "common: on-demand chunked backing for SparseLargeVector on Switch 2". DONE:
+  commit ec36f9edd0. GREEN: ASan + TSan all checks passed; differential check (base vs current,
+  no macro, POSIX backend): stdout+stderr+exit identical; probe: page_table.h compiles with the
+  chunked instantiation.
 - T3 (S2, inline): RED policy test + implement `EvictBlockCount` policy header and
   `EvictOldestBlocks` integration in `src/dynarmic/src/dynarmic/backend/arm64/address_space.{h,cpp}`;
   GREEN; structural checks.

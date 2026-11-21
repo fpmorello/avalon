@@ -13,6 +13,7 @@ extern unsigned long long eden_horizon_texture_evictions; ///< Textures the coll
 extern unsigned long long eden_horizon_jit_blocks;    ///< Compiled blocks alive, all cores
 extern unsigned long long eden_horizon_jit_cache_clears;
 extern unsigned long long eden_horizon_jit_heap_clears;     ///< Those made to free heap
+extern unsigned long long eden_horizon_jit_partial_evictions; ///< Blocks dropped by the heap-pressure eviction
 extern unsigned long long eden_horizon_jit_compile_micros;  ///< Compiling and publishing
 /// Sizes in bytes of the mappings of 8 MiB and more made through the mmap() shim
 extern unsigned long long eden_horizon_large_mmaps[64];

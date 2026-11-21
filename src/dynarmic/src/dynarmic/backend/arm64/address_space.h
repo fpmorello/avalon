@@ -9,6 +9,7 @@
 #pragma once
 
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <optional>
 #include <vector>
@@ -53,6 +54,10 @@ public:
 #ifdef __SWITCH__
     /// Writes the JIT cache list of this core. Returns the blocks written.
     std::size_t SaveWarmList() const;
+    /// Evicts the count oldest blocks from the bookkeeping maps. The code itself stays
+    /// valid (and executing) until the next full clear; only the dispatcher stops
+    /// finding the evicted blocks. Returns how many were evicted.
+    std::size_t EvictOldestBlocks(std::size_t count);
 #endif
 protected:
 #ifdef __SWITCH__
@@ -107,6 +112,11 @@ protected:
     IR::Block ir_block;
 #ifdef __SWITCH__
     std::size_t emits_since_heap_check = 0;
+    /// Blocks in emission order, oldest first, for EvictOldestBlocks.
+    std::deque<IR::LocationDescriptor> emission_order;
+    /// Evictions since the last full clear; the clear is the fallback when they do not
+    /// relieve the heap.
+    unsigned evictions_since_clear = 0;
 #endif
     const std::size_t code_cache_size;
 #ifdef __SWITCH__

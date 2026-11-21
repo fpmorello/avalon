@@ -17,12 +17,14 @@ WARN="-Wall -Wextra"
 
 # ASan catches leaks and use-after-free of the chunked backing.
 $CXX -std=c++23 $WARN -fsanitize=address -DEDEN_CHUNKED_SPARSE_VECTOR \
-    -I "$ROOT/src" "$ROOT/tools/switch2/tests/$TEST.cpp" -o "$OUT/${TEST}_asan"
+    -I "$ROOT/src" -I "$ROOT/src/dynarmic/src" \
+    "$ROOT/tools/switch2/tests/$TEST.cpp" -o "$OUT/${TEST}_asan"
 "$OUT/${TEST}_asan"
 
 # TSan catches chunk-allocation races between writers (not available on every host).
 if $CXX -std=c++23 -fsanitize=thread -DEDEN_CHUNKED_SPARSE_VECTOR \
-        -I "$ROOT/src" "$ROOT/tools/switch2/tests/$TEST.cpp" -o "$OUT/${TEST}_tsan" 2>/dev/null; then
+        -I "$ROOT/src" -I "$ROOT/src/dynarmic/src" \
+        "$ROOT/tools/switch2/tests/$TEST.cpp" -o "$OUT/${TEST}_tsan" 2>/dev/null; then
     "$OUT/${TEST}_tsan"
 else
     echo "note: TSan build unavailable, skipped"

@@ -43,7 +43,9 @@ Known limits:
 - No fastmem and no NCE: kaiHEN does not hand CPU exceptions to homebrew, so every guest
   memory access goes through the page table.
 - Memory is tight. The emulator, the guest's 4 GiB and the GPU share one heap of about
-  9 GiB, and long sessions can still run out.
+  9 GiB, and long sessions can still run out. The guest page table is committed on
+  demand (chunked backing) and the JIT drops its oldest blocks before clearing a whole
+  cache, but a full clear remains the last resort.
 - New guest code stutters while it is compiled. The CPU code cache removes most of it from
   the second session of a game on, at the cost of a longer start.
 - No touch screen, no network, one player, and no way back to the game list without

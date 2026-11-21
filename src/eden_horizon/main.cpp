@@ -471,11 +471,12 @@ public:
                  (compile - last_compile) / 1000);
         LOG_INFO(Frontend,
                  "Memory detail: textures {} MiB, buffers {} MiB, JIT blocks {}, cache clears {} ({} "
-                 "for heap), warmed {} blocks in {} ms, {} textures evicted",
+                 "for heap, {} blocks evicted first), warmed {} blocks in {} ms, {} textures evicted",
                  eden_horizon_texture_bytes >> 20, eden_horizon_buffer_bytes >> 20,
                  eden_horizon_jit_blocks, eden_horizon_jit_cache_clears,
-                 eden_horizon_jit_heap_clears, eden_horizon_jit_warm_blocks,
-                 eden_horizon_jit_warm_micros / 1000, eden_horizon_texture_evictions);
+                 eden_horizon_jit_heap_clears, eden_horizon_jit_partial_evictions,
+                 eden_horizon_jit_warm_blocks, eden_horizon_jit_warm_micros / 1000,
+                 eden_horizon_texture_evictions);
         last_count = count;
         last_bytes = bytes;
         last_micros = micros;
