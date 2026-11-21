@@ -27,7 +27,7 @@ builds again. Branch `feat/two-level-page-table` off `switch2-poc` in `fpmorello
   DONE: commit below (see git log). Check: `ninja dynarmic` for Switch 2 builds clean; no host
   RED possible (x86_64, no qemu) — runtime proof is T4's on-device self-test.
 - T3 (S1, S3, inline): `arm_dynarmic_64/32.cpp` pass the directory on `__SWITCH__`; full NRO build
-  green. Commit: pending.
+  green. DONE: full `tools/switch2/build.sh` exit 0, built avalon-b1.nro (42604741 bytes).
 - T4 (S2, inline): on-device self-test triggered by `sdmc:/switch/avalon/test_pagetable.txt`
   (A64 + A32 JIT loads/stores through the two-level table, PASS/FAIL file); README docs.
   Commit: pending.

@@ -201,8 +201,15 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
     // Memory
     if (page_table) {
         // Dynarmic will not write to the page table, const_cast is safe here
+#ifdef EDEN_SPARSE_CHUNKED_BACKING
+        // Chunked backing: hand the JIT the chunk directory for a two-level lookup.
+        config.page_table = reinterpret_cast<void**>(
+            const_cast<Common::PageTable::PageEntryData**>(page_table->entries.ChunkDirectory()));
+        config.page_table_level2_bits = std::uint8_t(page_table->entries.ChunkIndexBits());
+#else
         config.page_table = reinterpret_cast<void**>(
             const_cast<Common::PageTable::PageEntryData*>(page_table->entries.data()));
+#endif
         config.page_table_address_space_bits = std::uint32_t(address_space_bits);
         config.page_table_pointer_mask = Common::PageTable::ATTRIBUTE_MASK;
         config.page_table_marked_bit = uint8_t(0);
