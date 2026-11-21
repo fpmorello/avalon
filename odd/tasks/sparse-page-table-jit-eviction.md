@@ -72,11 +72,12 @@ documented for Windows/MSYS2, unavailable here).
   `MultiLevelPageTable` on `__SWITCH__` (`multi_level_page_table.inc:20-60`). Pre-existing (not in
   scope, observed): `IsCommittedPage` bounds check off-by-one (`index >` should be `>=`,
   `sparse_large_vector.h:172`).
-- L4: Verification limits: no Switch 2 build possible on this machine (devkitPro + ounce-devkit,
-  documented for Windows/MSYS2 only; `tools/switch2/configure.sh` requires `$DEVKITPRO`). Host
-  standalone tests cover the exact code selected on Switch via `EDEN_CHUNKED_SPARSE_VECTOR`
-  (S1) and the pure policy (S2); the S2 teardown integration gets structural verification only.
-  On-device validation (NRO build + game test) remains for the user's build setup.
+- L4: Verification limits: no Switch 2 build possible on this machine (devkitPro +
+  ounce-devkit, documented for Windows/MSYS2 only; `tools/switch2/configure.sh` requires
+  `$DEVKITPRO`). Host standalone tests cover the exact code selected on Switch via
+  `EDEN_CHUNKED_SPARSE_VECTOR` (S1) and the pure policy (S2); the S2 teardown integration gets
+  structural verification only. On-device validation (NRO build + game test) remains for the
+  user's build setup.
 - L5 (evidence): C1 = ec36f9edd0 (chunked SparseLargeVector + harness, 598 lines);
   C2 = 26e5145f97 (partial eviction + policy + stats + README, 178 lines). Branch total:
   772 insertions / 14 deletions over 13 files. Suite: sparse_chunked_test (ASan+TSan),
@@ -87,3 +88,20 @@ documented for Windows/MSYS2, unavailable here).
   Open: on-device NRO validation; git identity of both commits is the auto-detected
   `Franco <franco@MacBook-Pro-de-Franco.local>` (fix with git config + rebase --reset-author
   before pushing, if desired).
+- L6 (RDD): assess (baseRef switch2-poc, committedOnly): tier medium, nativeRisk high
+  (run.sh executable mode + shell process signals) → reviewDue. Ordinary review started
+  (lineage review-0d060ebf8c43cd81, lenses risk/resilience/reliability, committed range
+  af9267d1..710a7d53, 801 changed lines, correction budget 200). Group forecast: 3 model
+  runs via pi host relay, acknowledged and executed. Outcome: **approved**, no correction
+  required; 12 advisory findings, all informational (follow-up work, listed below);
+  acknowledgement burned the authority (burn evidence gentle-ai.review-acknowledged/v1).
+  Delivery follows ordinary repository policy (push/PR = user's decision).
+  Advisory findings (non-blocking): eviction emission_order may hold duplicates of
+  re-emitted blocks (address_space.cpp:382-399); eviction drops inbound link registrations
+  (:395-398); eviction integration only structurally tested (:374-411); fallback full clear
+  delayed under real pressure (:285-289); SparseLargeVector::Set silently drops on calloc
+  failure (sparse_large_vector.h:155-158); ZeroRegion multi-page path untested (:179-189);
+  sparse_host_behavior_test via run.sh always runs chunked, the POSIX variant only exists in
+  the differential (run.sh:19-21); evicted code space not reclaimed (known design,
+  address_space.cpp:390-399); eviction counter never decays (:285-289); feature-doc line 88
+  flagged by risk lens (informational).
