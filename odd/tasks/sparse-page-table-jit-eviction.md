@@ -42,10 +42,15 @@ documented for Windows/MSYS2, unavailable here).
   chunked instantiation.
 - T3 (S2, inline): RED policy test + implement `EvictBlockCount` policy header and
   `EvictOldestBlocks` integration in `src/dynarmic/src/dynarmic/backend/arm64/address_space.{h,cpp}`;
-  GREEN; structural checks.
+  GREEN; structural checks. DONE: RED = missing jit_eviction.h; GREEN = policy test ASan+TSan
+  all passed; integration structurally verified (teardown mirrors InvalidateBasicBlocks + frees
+  block_infos/reverse/block_references; code cursor untouched; ClearCache fallback after 2
+  evictions; emission_order pushed in Emit, cleared in ClearCache).
 - T4 (S3, inline): Eviction counter + stats wiring in `src/eden_horizon` log + README tweak;
   focused re-runs; commit C2 "dynarmic: partial eviction under heap pressure instead of full
-  cache clear".
+  cache clear". DONE: counter `eden_horizon_jit_partial_evictions` (stats.h + mman.cpp +
+  main.cpp log), README Known-limits bullet reworded honestly; all three host tests re-run
+  green (ASan+TSan); C2 = 26e5145f97.
 
 ## Log
 
@@ -72,3 +77,13 @@ documented for Windows/MSYS2, unavailable here).
   standalone tests cover the exact code selected on Switch via `EDEN_CHUNKED_SPARSE_VECTOR`
   (S1) and the pure policy (S2); the S2 teardown integration gets structural verification only.
   On-device validation (NRO build + game test) remains for the user's build setup.
+- L5 (evidence): C1 = ec36f9edd0 (chunked SparseLargeVector + harness, 598 lines);
+  C2 = 26e5145f97 (partial eviction + policy + stats + README, 178 lines). Branch total:
+  772 insertions / 14 deletions over 13 files. Suite: sparse_chunked_test (ASan+TSan),
+  sparse_host_behavior_test (chunked via run.sh + POSIX differential vs base commit:
+  identical), jit_eviction_test (ASan+TSan). Design note: eviction order is emission order
+  (oldest-first); warm-compiled blocks are oldest but may be hot — strictly better than the
+  previous full clear, fallback bounded at 2 evictions; recency-aware policy is follow-up.
+  Open: on-device NRO validation; git identity of both commits is the auto-detected
+  `Franco <franco@MacBook-Pro-de-Franco.local>` (fix with git config + rebase --reset-author
+  before pushing, if desired).
