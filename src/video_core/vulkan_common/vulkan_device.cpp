@@ -1673,8 +1673,18 @@ void Device::CollectPhysicalMemoryInfo() {
     }
 #ifdef __SWITCH__
     // Graphics memory comes out of the one heap that also holds the emulated RAM, the
-    // page tables and the JIT. Budget the caches for 2 GiB so they start evicting early.
-    device_access_memory = std::min<u64>(device_access_memory, 2_GiB);
+    // page tables and the JIT. Take a quarter of the heap, capped at the 2 GiB that fit
+    // a 9 GiB one next to the guest. Aggressive (the per-game GPU option's fast mode)
+    // spends a third of it, capped at 3 GiB, to keep more textures cached.
+    extern "C" std::uint64_t heapGetTotalSize(void);
+    const u64 heap_total = heapGetTotalSize();
+    const u64 vram_budget =
+        Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive
+            ? std::min<u64>(std::max<u64>(heap_total / 3, 1536_MiB), 3_GiB)
+            : std::min<u64>(std::max<u64>(heap_total / 4, 1_GiB), 2_GiB);
+    device_access_memory = std::min<u64>(device_access_memory, vram_budget);
+    LOG_INFO(Render_Vulkan, "Graphics memory budget {} MiB of a {} MiB heap", vram_budget >> 20,
+             heap_total >> 20);
 #endif
 }
 

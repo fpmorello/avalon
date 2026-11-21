@@ -140,7 +140,8 @@ std::vector<Platform::MenuOption> DefaultOptions() {
         {"gpu", "GPU emulation",
          "accurate follows the console's GPU closely. fast skips some of the waits\n"
          "between the game and the GPU, as Eden does on phones: quicker in heavy\n"
-         "games, and it may break an effect here and there.",
+         "games, and it may break an effect here and there. fast also raises the\n"
+         "graphics memory budget, keeping more textures cached.",
          {"accurate", "fast"}, 0, true},
         {"language", "Game language",
          "The language and region the games are told the console is set to.",
@@ -307,9 +308,14 @@ void ApplyOptions(const std::vector<Platform::MenuOption>& options) {
                                                           : Settings::ConsoleMode::Docked);
         } else if (option.key == "address_space") {
             eden_horizon_compact_address_space = choice == "compact" ? 1 : choice == "game" ? 2 : 0;
-        } else if (option.key == "gpu" && choice == "fast") {
-            Settings::values.gpu_accuracy.SetValue(Settings::GpuAccuracy::Low);
-            Settings::values.use_reactive_flushing.SetValue(false);
+        } else if (option.key == "gpu") {
+            const bool fast = choice == "fast";
+            Settings::values.gpu_accuracy.SetValue(fast ? Settings::GpuAccuracy::Low
+                                                         : Settings::GpuAccuracy::High);
+            Settings::values.use_reactive_flushing.SetValue(!fast);
+            Settings::values.vram_usage_mode.SetValue(
+                fast ? Settings::VramUsageMode::Aggressive
+                     : Settings::VramUsageMode::Conservative);
         } else if (option.key == "language") {
             using Settings::Language, Settings::Region;
             static constexpr std::tuple<std::string_view, Language, Region> languages[]{
