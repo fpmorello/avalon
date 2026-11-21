@@ -3,7 +3,7 @@
 Objective: cut the two confirmed root causes of the port's memory pressure and JIT stutter:
 (1a) `SparseLargeVector` commits its whole (up to 1 GiB) backing on Switch; (2a) `AddressSpace`
 clears the whole JIT cache when the heap runs low. Branch `improve/sparse-page-table-jit-eviction`
-off `switch2-poc` in the fork `francomorello-pm/eden-switch2-poc`. Delivery: work-unit commits on
+off `switch2-poc` in the fork `fpmorello/eden-switch2-poc`. Delivery: work-unit commits on
 the feature branch (push/PR/merge are the user's decisions). Test runner: standalone `clang++`
 harness under `tools/switch2/tests/` (host; the NRO build needs devkitPro + ounce-devkit, only
 documented for Windows/MSYS2, unavailable here).
@@ -55,7 +55,7 @@ documented for Windows/MSYS2, unavailable here).
 ## Log
 
 - L1 (2026-11-21, user): "Quiero hace un fork para revisar como lo podemos mejorar. Entender que
-  esta fallando, que falta." → fork created (`francomorello-pm/eden-switch2-poc`), full read-only
+  esta fallando, que falta." → fork created (`fpmorello/eden-switch2-poc`), full read-only
   analysis delivered (architecture, failures, gaps, ranked improvements).
 - L2 (2026-11-21, user): "Dale seguimos con tu recomendacion" → implements recommendation
   1a (sparse chunked page-table backing) + 2a (partial JIT eviction), priority chosen by user:
