@@ -9,6 +9,7 @@
 : "${DEVKITPRO:?Set DEVKITPRO (e.g. /opt/devkitpro)}"
 . "$DEVKITPRO/switch2vars.sh"
 
+set -e
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 ninja -C "$ROOT/build/switch2" "$@"
 
