@@ -31,6 +31,10 @@
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 
+#ifdef __SWITCH__
+#include "common/horizon/memory_mark.h"
+#endif
+
 #if defined(__ANDROID__) && defined(ARCHITECTURE_arm64)
 #include <adrenotools/bcenabler.h>
 #include <android/api-level.h>
@@ -1676,7 +1680,6 @@ void Device::CollectPhysicalMemoryInfo() {
     // page tables and the JIT. Take a quarter of the heap, capped at the 2 GiB that fit
     // a 9 GiB one next to the guest. Aggressive (the per-game GPU option's fast mode)
     // spends a third of it, capped at 3 GiB, to keep more textures cached.
-    extern "C" std::uint64_t heapGetTotalSize(void);
     const u64 heap_total = heapGetTotalSize();
     const u64 vram_budget =
         Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive
