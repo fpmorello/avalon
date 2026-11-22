@@ -24,6 +24,7 @@ using CodePtr = std::uint32_t*;
 struct Jit::Impl final {
     Impl(Jit* jit_interface, A64::UserConfig conf)
         : conf(conf)
+        ASSERT_MSG(!conf.page_table_level2_bits, "two-level page tables need the arm64 backend");
         //, current_address_space(conf)
         , jit_interface(jit_interface) {}
 

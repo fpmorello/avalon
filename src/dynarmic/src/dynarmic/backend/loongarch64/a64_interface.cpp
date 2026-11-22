@@ -13,7 +13,9 @@
 namespace Dynarmic::A64 {
 
 struct Jit::Impl final {
-    explicit Impl(UserConfig conf_) : conf(std::move(conf_)) {}
+    explicit Impl(UserConfig conf_) : conf(std::move(conf_)) {
+        ASSERT_MSG(!conf.page_table_level2_bits, "two-level page tables need the arm64 backend");
+    }
 
     HaltReason Run() {
         UNIMPLEMENTED();

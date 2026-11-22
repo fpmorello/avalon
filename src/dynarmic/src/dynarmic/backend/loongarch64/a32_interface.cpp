@@ -20,6 +20,7 @@ using namespace Backend::LoongArch64;
 
 struct Jit::Impl final {
     Impl(Jit* jit_interface, A32::UserConfig conf)
+    ASSERT_MSG(!conf.page_table_level2_bits, "two-level page tables need the arm64 backend");
             : jit_interface(jit_interface)
             , conf(conf)
             , current_address_space(conf) {}

@@ -39,7 +39,7 @@ constexpr std::uint64_t PageSize = 0x1000;
 constexpr std::uint64_t CodeAddress = 0x0010'0000;
 constexpr std::uint64_t StoredValue = 0x1122'3344'5566'7788ULL;
 /// What the callbacks return for a read, so a fallback read is recognizable.
-constexpr std::uint64_t FallbackTag = 0xFA11'BAC0'0000'0000ULL;
+constexpr std::uint64_t FallbackTag = 0xFA11'BAC0'5CA1'0F1EULL;
 
 class Report {
 public:

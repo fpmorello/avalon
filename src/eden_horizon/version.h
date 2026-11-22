@@ -7,11 +7,11 @@
 
 #pragma once
 
-#define EDEN_HORIZON_BUILD "b5"
+#define EDEN_HORIZON_BUILD "b6"
 #define EDEN_HORIZON_BUILD_DATE "2026-11-21"
 
 /// Short form for screen headers, where width is scarce.
-#define EDEN_HORIZON_BUILD_ID "b5"
+#define EDEN_HORIZON_BUILD_ID "b6"
 
 /// Full form for logs and crash reports.
 #define EDEN_HORIZON_VERSION \

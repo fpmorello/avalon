@@ -660,6 +660,11 @@ int main(int argc, char** argv) {
     if (load_result != Core::SystemResultStatus::Success) {
         LOG_CRITICAL(Frontend, "Failed to load {}: status {}", game_path,
                      static_cast<u32>(load_result));
+        if (OptionIs(options, "return_to_list", "on") && argc > 0) {
+            const bool relaunch = Platform::RequestRelaunch(argv[0]);
+            LOG_INFO(Frontend, "Return to the game list after the failure: {}",
+                     relaunch ? "relaunching" : "not supported by the loader");
+        }
         Common::Log::Stop();
         // The system already started host threads; see Platform::ExitProcess.
         Platform::ExitProcess();

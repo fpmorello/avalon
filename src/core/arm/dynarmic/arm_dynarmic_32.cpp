@@ -212,6 +212,12 @@ void ArmDynarmic32::MakeJit(Common::PageTable* page_table) {
     // of stutter. The guest page table is allocated on demand now, so every address
     // space mode has room for the larger size.
     config.code_cache_size = std::uint32_t(64_MiB);
+    // With last session's lists the caches follow what each core needed.
+    if (const unsigned megabytes = eden_horizon_jit_cache_megabytes(int(m_core_index));
+        megabytes != 0) {
+        config.code_cache_size = megabytes * std::uint32_t(1_MiB);
+    }
+    LOG_INFO(Core_ARM, "Core {} code cache: {} MiB", m_core_index, config.code_cache_size >> 20);
 #elif defined(ARCHITECTURE_arm64) || defined(__sun__) || defined(__NetBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
     config.code_cache_size = std::uint32_t(128_MiB);
 #else

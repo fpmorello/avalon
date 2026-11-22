@@ -4,6 +4,19 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b6 — 2026-11-22 (`sw2-fork-b6`)
+
+Branch `feat/b6-backlog-close`. Closes the review findings left open since b1-b3.
+
+- **A failed game comes back to the game list** (`eden_horizon`): a ROM that fails to load
+  now relaunches into the picker when "Return to the game list" is on, instead of ending in
+  the HOME menu; the relaunch still goes through a fresh process.
+- **Backends without the two-level lookup reject it** (`dynarmic`): the riscv64 and
+  loongarch64 backends assert like x64 when `page_table_level2_bits` is set.
+- **A32 JIT caches sized per core** (`core`): like A64, from last session's lists.
+- **The shared zero chunk is read-only storage** (`common`).
+- **Self-test**: the fallback tag's low bits no longer read as a plain address on A32.
+
 ## b5 — 2026-11-22 (`sw2-fork-b5`)
 
 Branch `feat/b5-cover-art`.
