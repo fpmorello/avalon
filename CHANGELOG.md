@@ -4,6 +4,22 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b3 — 2026-11-22 (`sw2-fork-b3`)
+
+Branch `feat/b3-robustness-fps-diagnostics`.
+
+- **Robustness** (`common`): `SparseLargeVector` rejected indices greater than its size
+  but not the index equal to it, which read one entry past the chunk map (an
+  AddressSanitizer heap-buffer-overflow in the host test); every accessor now rejects the
+  boundary index. Added a multi-page, cross-chunk `ZeroRegion` test.
+- **FPS diagnostics** (`core`, `eden_horizon`): `PerfStats` tracks the slowest system
+  frame of each window and how many frames were presented, so the log no longer averages
+  `nan` while nothing is drawn. The `Performance` line reports `frame X ms (worst Y ms)`
+  and `JIT mem fallbacks N`: how many guest memory accesses the JIT served through the
+  callbacks — the visible cost of the two-level lookup and of misaligned or unmapped
+  addresses. First data point (b2, Super Mario 3D World, first session in `full`): the
+  early fps dips tracked JIT compile time, with zero texture evictions.
+
 ## b2 — 2026-11-21 (`sw2-fork-b2`)
 
 Branch `feat/b2-full-space-eviction-fixes`. First build that runs: b1 did not compile for
