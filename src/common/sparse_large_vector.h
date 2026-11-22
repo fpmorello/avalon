@@ -126,7 +126,7 @@ public:
 
     /// Returns a reference to the value of the requested index and allocates memory if needed.
     T& GetAndFault(std::size_t index) noexcept {
-        if (index > alloc_size / sizeof(T)) {
+        if (index >= alloc_size / sizeof(T)) {
             UNREACHABLE_MSG("Out of bounds RW access on SparseLargeVector @ {}", index);
         }
 
@@ -164,7 +164,7 @@ public:
     }
 
     void Set(std::size_t index, const T& value) noexcept {
-        if (index > alloc_size / sizeof(T)) {
+        if (index >= alloc_size / sizeof(T)) {
             LOG_CRITICAL(Common_Memory, "Out of bounds write on SparseLargeVector @ {}", index);
             return;
         }
@@ -301,7 +301,7 @@ public:
 
 private:
     [[nodiscard]] constexpr bool IsCommittedPage(std::size_t index) const noexcept {
-        if (index > alloc_size / sizeof(T)) {
+        if (index >= alloc_size / sizeof(T)) {
             LOG_CRITICAL(Common_Memory, "Out of bounds access on large vector @ {}", index);
             return false;
         }

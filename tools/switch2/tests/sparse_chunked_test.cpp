@@ -89,6 +89,50 @@ void TestFaultingAccessors() {
     CHECK(v[kChunkEntries + 3] == 11);
 }
 
+void TestBoundaryIndexIsRejected() {
+    // index == size is out of bounds: it must be refused, not read one entry past the end
+    // of the chunk map or the committed-page bitmap.
+    constexpr std::size_t kChunkEntries = Common::SparseTestStats::ChunkEntriesFor<u64>();
+    SparseLargeVector<u64> v(kChunkEntries * 4);
+    CHECK(v.size() == kChunkEntries * 4);
+    CHECK(Common::SparseTestStats::ChunksLive() == 0);
+
+    v.Set(v.size(), 42);
+    CHECK(v.GetOrDefault(v.size()) == 0);
+    CHECK(v[v.size()] == 0);
+    CHECK(Common::SparseTestStats::ChunksLive() == 0);
+
+    // The legal boundary neighbour still works.
+    v.Set(v.size() - 1, 7);
+    CHECK(v.GetOrDefault(v.size() - 1) == 7);
+}
+
+void TestZeroRegionMultiPage() {
+    const std::size_t kChunkEntries = Common::SparseTestStats::ChunkEntriesFor<u64>();
+    const std::size_t kPageEntries = 4096 / sizeof(u64); // host page of 8-byte entries
+    SparseLargeVector<u64> v(kChunkEntries * 3);
+
+    // A band three host pages wide that straddles a chunk boundary, plus neighbours on
+    // both sides that must survive.
+    const std::size_t start = kChunkEntries - kPageEntries / 2;
+    const std::size_t end = start + 3 * kPageEntries;
+    for (std::size_t i = start - 8; i < end + 8; ++i) {
+        v.Set(i, i + 1);
+    }
+    v.ZeroRegion(start, end);
+    for (std::size_t i = start; i < end; ++i) {
+        CHECK(v.GetOrDefault(i) == 0);
+    }
+    for (std::size_t i = 1; i <= 8; ++i) {
+        CHECK(v.GetOrDefault(start - i) == start - i + 1);
+        CHECK(v.GetOrDefault(end + i - 1) == end + i);
+    }
+
+    // Zeroing a range nobody wrote to is a no-op, not a crash.
+    v.ZeroRegion(2 * kChunkEntries, 2 * kChunkEntries + 5 * kPageEntries);
+    CHECK(v.GetOrDefault(2 * kChunkEntries) == 0);
+}
+
 void TestZeroRegion() {
     SparseLargeVector<u64> v(4096);
     for (std::size_t i = 0; i < 100; ++i) {
@@ -205,6 +249,8 @@ int main() {
     TestRoundtripAndLazyChunks();
     TestChunkGranularity();
     TestFaultingAccessors();
+    TestBoundaryIndexIsRejected();
+    TestZeroRegionMultiPage();
     TestZeroRegion();
     TestResizeAndClear();
     TestDestructorFrees();
