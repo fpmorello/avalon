@@ -19,6 +19,10 @@ struct PerfStatsResults {
     double average_game_fps;
     /// Walltime per system frame, in seconds, excluding any waits
     double frametime;
+    /// Walltime of the slowest system frame of the window, in seconds
+    double worst_frametime;
+    /// System frames presented in the window; zero while nothing is drawn
+    std::uint64_t system_frames;
     /// Ratio of walltime / emulated time elapsed
     double emulation_speed;
 };
@@ -69,6 +73,7 @@ private:
 
     /// Cumulative duration (excluding v-sync/frame-limiting) of frames since last reset
     Clock::duration accumulated_frametime = Clock::duration::zero();
+    Clock::duration worst_frame_time = Clock::duration::zero();
     /// Cumulative number of system frames (LCD VBlanks) presented since last reset
     u32 system_frames = 0;
     /// Cumulative number of game frames (GSP frame submissions) since last reset

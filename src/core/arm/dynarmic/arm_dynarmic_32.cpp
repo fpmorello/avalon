@@ -26,6 +26,9 @@ DynarmicCallbacks32::DynarmicCallbacks32(ArmDynarmic32& parent, Kernel::KProcess
 {}
 
 u64 DynarmicCallbacks32::MemoryRead(u32 vaddr, size_t size) {
+#ifdef __SWITCH__
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     CheckMemoryAccess(vaddr, size, Kernel::DebugWatchpointType::Read);
     switch (size) {
     case sizeof(u64): return m_memory.Read64(vaddr);
@@ -48,6 +51,9 @@ std::optional<u32> DynarmicCallbacks32::MemoryReadCode(u32 vaddr) {
 }
 
 void DynarmicCallbacks32::MemoryWrite(Dynarmic::A32::VAddr vaddr, u64 value, size_t size) {
+#ifdef __SWITCH__
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     if (CheckMemoryAccess(vaddr, size, Kernel::DebugWatchpointType::Write)) {
         switch (size) {
         case sizeof(u64): return m_memory.Write64(vaddr, value);

@@ -463,7 +463,11 @@ public:
         UpdateOverlay(stats.average_game_fps, stats.emulation_speed);
         speed_sum += stats.emulation_speed;
         fps_sum += stats.average_game_fps;
-        frametime_sum += stats.frametime;
+        if (stats.system_frames > 0) {
+            frametime_sum += stats.frametime;
+            ++frame_samples;
+            worst_frame = std::max(worst_frame, stats.worst_frametime);
+        }
         if (++samples < 10) {
             return;
         }
@@ -471,12 +475,17 @@ public:
         const unsigned long long bytes = eden_horizon_jit_publish_bytes;
         const unsigned long long micros = eden_horizon_jit_publish_micros;
         const unsigned long long compile = eden_horizon_jit_compile_micros;
+        const unsigned long long fallbacks = eden_horizon_jit_mem_fallbacks;
+        const double frames_ms =
+            frame_samples != 0 ? frametime_sum * 1000.0 / frame_samples : 0.0;
         LOG_INFO(Frontend,
-                 "Performance: speed {:.0f}%, game {:.1f} fps, frame {:.1f} ms; JIT published {} "
-                 "times, {} KiB, {} ms; JIT busy {} ms",
-                 speed_sum * 100.0 / samples, fps_sum / samples, frametime_sum * 1000.0 / samples,
+                 "Performance: speed {:.0f}%, game {:.1f} fps, frame {:.1f} ms (worst {:.1f} ms); "
+                 "JIT published {} times, {} KiB, {} ms; JIT busy {} ms; JIT mem fallbacks {}",
+                 speed_sum * 100.0 / samples, fps_sum / samples, frames_ms, worst_frame * 1000.0,
                  count - last_count, (bytes - last_bytes) >> 10, (micros - last_micros) / 1000,
-                 (compile - last_compile) / 1000);
+                 (compile - last_compile) / 1000, fallbacks - last_fallbacks);
+        worst_frame = 0.0;
+        last_fallbacks = fallbacks;
         LOG_INFO(Frontend,
                  "Memory detail: page tables {} MiB, textures {} MiB, buffers {} MiB, JIT blocks {}, "
                  "cache clears {} ({} for heap, {} blocks evicted first), warmed {} blocks in {} ms, "
@@ -492,6 +501,7 @@ public:
         last_micros = micros;
         last_compile = compile;
         speed_sum = fps_sum = frametime_sum = 0.0;
+        frame_samples = 0;
         samples = 0;
     }
 
@@ -511,7 +521,9 @@ private:
     Core::System& system;
     bool show_fps;
     std::string mode_line;
-    double speed_sum{}, fps_sum{}, frametime_sum{};
+    double speed_sum{}, fps_sum{}, frametime_sum{}, worst_frame{};
+    unsigned long long last_fallbacks{};
+    std::size_t frame_samples{};
     int samples{};
     unsigned long long last_count{}, last_bytes{}, last_micros{}, last_compile{};
 };

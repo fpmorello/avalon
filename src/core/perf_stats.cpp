@@ -76,6 +76,9 @@ void PerfStats::EndSystemFrame() {
             std::chrono::duration<double, std::milli>(frame_time).count();
     }
     accumulated_frametime += frame_time;
+    if (frame_time > worst_frame_time) {
+        worst_frame_time = frame_time;
+    }
     system_frames += 1;
 
     previous_frame_length = frame_end - previous_frame_end;
@@ -111,8 +114,12 @@ PerfStatsResults PerfStats::GetAndResetStats(microseconds current_system_time_us
     const PerfStatsResults results{
         .system_fps = static_cast<double>(system_frames) / interval,
         .average_game_fps = (current_fps + previous_fps) / 2.0,
-        .frametime = duration_cast<DoubleSecs>(accumulated_frametime).count() /
-                     static_cast<double>(system_frames),
+        .frametime = system_frames == 0
+                         ? 0.0
+                         : duration_cast<DoubleSecs>(accumulated_frametime).count() /
+                               static_cast<double>(system_frames),
+        .worst_frametime = duration_cast<DoubleSecs>(worst_frame_time).count(),
+        .system_frames = system_frames,
         .emulation_speed = system_us_per_second.count() / 1'000'000.0,
     };
 
@@ -120,6 +127,7 @@ PerfStatsResults PerfStats::GetAndResetStats(microseconds current_system_time_us
     reset_point = now;
     reset_point_system_us = current_system_time_us;
     accumulated_frametime = Clock::duration::zero();
+    worst_frame_time = Clock::duration::zero();
     system_frames = 0;
     game_frames.store(0, std::memory_order_relaxed);
     previous_fps = current_fps;

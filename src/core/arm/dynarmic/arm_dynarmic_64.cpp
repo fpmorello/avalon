@@ -26,6 +26,10 @@ DynarmicCallbacks64::DynarmicCallbacks64(ArmDynarmic64& parent, Kernel::KProcess
 {}
 
 u64 DynarmicCallbacks64::MemoryRead(u64 vaddr, size_t size) {
+#ifdef __SWITCH__
+    // Every access the JIT's inline page table path could not serve.
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     CheckMemoryAccess(vaddr, size, Kernel::DebugWatchpointType::Read);
     switch (size) {
     case sizeof(u64): return m_memory.Read64(vaddr);
@@ -36,6 +40,9 @@ u64 DynarmicCallbacks64::MemoryRead(u64 vaddr, size_t size) {
     }
 }
 Dynarmic::A64::Vector DynarmicCallbacks64::MemoryRead128(u64 vaddr) {
+#ifdef __SWITCH__
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     CheckMemoryAccess(vaddr, 16, Kernel::DebugWatchpointType::Read);
     return {m_memory.Read64(vaddr), m_memory.Read64(vaddr + 8)};
 }
@@ -52,6 +59,9 @@ std::optional<u32> DynarmicCallbacks64::MemoryReadCode(u64 vaddr) {
 }
 
 void DynarmicCallbacks64::MemoryWrite(Dynarmic::A64::VAddr vaddr, u64 value, std::size_t size) {
+#ifdef __SWITCH__
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     if (CheckMemoryAccess(vaddr, size, Kernel::DebugWatchpointType::Write)) {
         switch (size) {
         case sizeof(u64): return m_memory.Write64(vaddr, u64(value));
@@ -63,6 +73,9 @@ void DynarmicCallbacks64::MemoryWrite(Dynarmic::A64::VAddr vaddr, u64 value, std
     }
 }
 void DynarmicCallbacks64::MemoryWrite128(u64 vaddr, Dynarmic::A64::Vector value) {
+#ifdef __SWITCH__
+    __atomic_fetch_add(&eden_horizon_jit_mem_fallbacks, 1, __ATOMIC_RELAXED);
+#endif
     if (CheckMemoryAccess(vaddr, 16, Kernel::DebugWatchpointType::Write)) {
         m_memory.Write64(vaddr, value[0]);
         m_memory.Write64(vaddr + 8, value[1]);
