@@ -37,7 +37,10 @@ Folders show no cover; a game with no cover shows a placeholder with the hint.
   colours land where the geometry puts them, rounded corners and panel gap clean.
 - T3 (S1, S2, inline): picker integration (cover cache, load on selection change), version
   b5, CHANGELOG, README, NRO build. DONE: CoverCache decodes at most one PNG per selection
-  change (title id first, then file stem); build below.
+  change (title id first, then file stem); avalon-b5.nro built (42827591 bytes). Link fix:
+  the project already compiles stb into the common library, so the vendored copy uses
+  STB_IMAGE_STATIC (file-local symbols, no collision) and keeps its own PNG-only build with
+  the 2048px cap plus an stbi_info pre-check; host test provides nothing extra.
 
 ## Tasks (task 2 of the user's batch: eden-nx2 analysis)
 

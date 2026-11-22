@@ -5,8 +5,10 @@
 
 #include <cstdio>
 
-// stb_image v2.34, public domain (see the licence block inside): PNG only, with a size
-// limit, so a stray file cannot make the loader allocate the heap away.
+// stb_image v2.34, public domain (licence block inside), vendored as a private copy:
+// STATIC makes every stbi_* symbol file-local, so it cannot collide with the older stb
+// build inside the common library. PNG is all the picker loads.
+#define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #define STBI_MAX_DIMENSIONS UiImage::MaxDimension
@@ -35,7 +37,14 @@ bool Decode(stbi_uc* data, Image& image) {
 
 bool LoadPngFromMemory(const std::uint8_t* bytes, std::size_t size, Image& image) {
     image = {};
-    int width = 0, height = 0, channels = 0;
+    // Read the header first: the shared stb build has no dimension cap, so a stray
+    // huge PNG must be refused before it allocates.
+    int width = 0, height = 0, header_channels = 0;
+    if (!stbi_info_from_memory(bytes, int(size), &width, &height, &header_channels) ||
+        !WithinLimits(width, height)) {
+        return false;
+    }
+    int channels = 0;
     stbi_uc* const data =
         stbi_load_from_memory(bytes, int(size), &width, &height, &channels, 4);
     if (!WithinLimits(width, height)) {
