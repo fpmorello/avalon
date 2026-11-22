@@ -27,7 +27,13 @@ JIT fell back to memory callbacks. Branch `feat/b3-robustness-fps-diagnostics` o
   `nan` fix and richer Performance line in the frontend, `eden_horizon_jit_mem_fallbacks`
   counter in the A64/A32 memory callbacks. Commit: pending.
 - T3 (S3, inline): `version.h` b3, CHANGELOG.md, NRO build. Commit: pending.
-- T4 (S1-S3, gentle-ai-verify): independent verification.
+- T4 (S1-S3, gentle-ai-verify): independent verification. UNAVAILABLE: the verifier
+  agent errored twice ("assistant reported an error"); not retried further. Inline checks
+  instead: all four host suites green (ASan+TSan) after the boundary fix; no positional
+  PerfStatsResults initializer exists outside perf_stats.cpp (PC build unaffected);
+  worst_frame_time written and reset under object_mutex; frametime divisions guarded
+  (system_frames==0, frame_samples==0); 6 fallback-counter sites, all under #ifdef
+  __SWITCH__; NRO b3 built, tag sw2-fork-b3.
 
 ## Log
 
