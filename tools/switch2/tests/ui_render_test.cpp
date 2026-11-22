@@ -95,26 +95,63 @@ PickerView SamplePicker(int count, int selected) {
     return view;
 }
 
+/// A synthetic vertical cover: violet-to-teal gradient with a white frame.
+UiImage::Image SyntheticCover(int width, int height) {
+    UiImage::Image image;
+    image.width = width;
+    image.height = height;
+    image.rgba.resize(std::size_t(width) * height * 4);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            std::uint8_t* p = image.rgba.data() + (std::size_t(y) * width + x) * 4;
+            const float t = static_cast<float>(y) / (height - 1);
+            p[0] = std::uint8_t(124 + (61 - 124) * t);
+            p[1] = std::uint8_t(108 + (214 - 108) * t);
+            p[2] = std::uint8_t(242 - (242 - 196) * t);
+            p[3] = 255;
+        }
+    }
+    return image;
+}
+
 void TestPicker() {
     Screen screen;
-    SetBuildLabel("b4");
-    DrawPicker(screen.canvas(), SamplePicker(8, 2));
+    SetBuildLabel("b5");
+    const UiImage::Image cover = SyntheticCover(300, 400);
+    PickerView view = SamplePicker(8, 2);
+    view.cover = &cover;
+    DrawPicker(screen.canvas(), view);
     CHECK(screen.GuardsIntact());
     CHECK(screen.Busy(40, 18, 104, 82) > 800);   // logo
     CHECK(screen.Busy(120, 20, 260, 70) > 300);  // "Avalon" title
-    CHECK(screen.Busy(40, 146, 1240, 146 + 9 * 54) > 5000); // list rows
+    CHECK(screen.Busy(40, 146, 760, 146 + 9 * 54) > 4000); // list rows, left column
+    CHECK(screen.Busy(776, 132, 1240, 652) > 30000);       // the selected game's cover
     CHECK(screen.Busy(40, 668, 900, 710) > 300); // button hints
     // The selected row (index 2) is highlighted: its left edge differs from an unselected row's.
     CHECK(screen.At(60, 146 + 2 * 54 + 24)[2] != screen.At(60, 146 + 3 * 54 + 24)[2]);
     screen.Save("picker");
+
+    // Without a cover the same game shows the placeholder with the convention.
+    Screen no_cover_screen;
+    view.cover = nullptr;
+    DrawPicker(no_cover_screen.canvas(), view);
+    CHECK(no_cover_screen.Busy(790, 190, 1230, 640) > 400); // hint text
+    no_cover_screen.Save("picker_nocover");
+
+    // A folder selected: no cover and no placeholder.
+    Screen folder_screen;
+    view.selected = 0;
+    DrawPicker(folder_screen.canvas(), view);
+    CHECK(folder_screen.Busy(790, 190, 1230, 640) < 400);
+    folder_screen.Save("picker_folder");
 }
 
 void TestPickerScrolled() {
     Screen screen;
     DrawPicker(screen.canvas(), SamplePicker(40, 30));
     CHECK(screen.GuardsIntact());
-    CHECK(screen.Busy(1246, 146, 1256, 146 + 9 * 54) > 40); // scroll bar
-    CHECK(screen.Busy(1100, 104, 1240, 140) > 50);          // "31 / 40"
+    CHECK(screen.Busy(752, 146, 760, 146 + 9 * 54) > 40); // scroll bar at the list edge
+    CHECK(screen.Busy(560, 104, 752, 140) > 50);           // "31 / 40"
     screen.Save("picker_scrolled");
 }
 

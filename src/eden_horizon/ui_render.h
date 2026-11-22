@@ -10,6 +10,10 @@
 #include <string>
 #include <vector>
 
+namespace UiImage {
+struct Image;
+}
+
 namespace UiRender {
 
 constexpr int ScreenWidth = 1280;
@@ -34,7 +38,9 @@ struct PickerView {
     std::string folder;
     std::vector<ListItem> items;
     int selected;
-    int top; ///< First visible item
+    int top;  ///< First visible item
+    /// Cover of the selected game, or null when it has none (folders never do).
+    const UiImage::Image* cover = nullptr;
 };
 
 struct OptionRow {

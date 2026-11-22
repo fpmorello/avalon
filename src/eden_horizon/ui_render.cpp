@@ -3,6 +3,8 @@
 
 #include "eden_horizon/ui_render.h"
 
+#include "eden_horizon/ui_image.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -277,6 +279,55 @@ void DrawFooter(const Canvas& canvas, const std::vector<std::pair<std::string_vi
     }
 }
 
+void DrawFolderIcon(const Canvas& canvas, int x, int y);
+void DrawHelp(const Canvas& canvas, int x, int y, int width, int bottom, std::string_view help,
+              Color body);
+
+/// The cover panel's box on the right of the list.
+constexpr int CoverLeft = 776, CoverTop = 132, CoverWidth = 464, CoverHeight = 520;
+/// The list column leaves room for the cover panel.
+constexpr int ListWidth = CoverLeft - 40 - 24;
+
+/// Aspect-fit image in a rounded frame. `image` is RGBA.
+void DrawCoverImage(const Canvas& canvas, const UiImage::Image& image) {
+    const float scale = std::min(static_cast<float>(CoverWidth - 24) / image.width,
+                                 static_cast<float>(CoverHeight - 24) / image.height);
+    const int w = std::max(1, int(image.width * scale));
+    const int h = std::max(1, int(image.height * scale));
+    const int x = CoverLeft + (CoverWidth - w) / 2;
+    const int y = CoverTop + (CoverHeight - h) / 2;
+    const int radius = 10;
+    for (int row = 0; row < h; ++row) {
+        for (int col = 0; col < w; ++col) {
+            const float cx = col < radius ? radius - 0.5f : col >= w - radius ? w - radius - 0.5f : col + 0.5f;
+            const float cy = row < radius ? radius - 0.5f : row >= h - radius ? h - radius - 0.5f : row + 0.5f;
+            const float corner = std::clamp(radius + 0.5f - std::hypot(col + 0.5f - cx, row + 0.5f - cy), 0.0f, 1.0f);
+            if (corner <= 0.0f) {
+                continue;
+            }
+            const std::uint8_t* p = image.rgba.data() +
+                (std::size_t(row * image.height / h) * image.width + col * image.width / w) * 4;
+            Blend(canvas, x + col, y + row, Color{p[0], p[1], p[2]}, static_cast<unsigned>(p[3] * corner));
+        }
+    }
+}
+
+/// What the picker shows when the game has no cover: how to add one.
+void DrawCoverPlaceholder(const Canvas& canvas) {
+    FillRoundRect(canvas, CoverLeft + 10, CoverTop + 60, CoverWidth - 20, CoverHeight - 120, 14,
+                  Color{255, 255, 255, 14});
+    DrawFolderIcon(canvas, CoverLeft + (CoverWidth - 34) / 2, CoverTop + 130);
+    const int hint_x = CoverLeft + 26;
+    const int hint_w = CoverWidth - 52;
+    DrawText(canvas, BodyFont(), hint_x, CoverTop + 190, "No cover", TextDim, hint_w);
+    DrawHelp(canvas, hint_x, CoverTop + 236, hint_w, CoverTop + CoverHeight - 20,
+             "Put the game's cover next to the game file, as PNG:\n"
+             "  title-id.png  the id in the game's name, lower\n"
+             "                case, brackets off\n"
+             "  or the same name as the game file, ending in .png\n\n"
+             "Up to 2048 x 2048 pixels.", TextDim);
+}
+
 void DrawFolderIcon(const Canvas& canvas, int x, int y) {
     FillRoundRect(canvas, x, y + 4, 18, 8, 3, Folder);
     FillRoundRect(canvas, x, y + 8, 34, 24, 4, Folder);
@@ -322,21 +373,22 @@ int DrawWrapped(const Canvas& canvas, int x, int y, int width, int bottom, std::
 /// Help text written for the old 80-column console: lines of a paragraph are joined and
 /// wrapped again, and "key   value" rows (a run of spaces after the first word, with
 /// indented continuation lines) are laid out in two columns.
-void DrawHelp(const Canvas& canvas, int x, int y, int width, int bottom, std::string_view help) {
+void DrawHelp(const Canvas& canvas, int x, int y, int width, int bottom, std::string_view help,
+              Color body) {
     const Font& font = SmallFont();
     constexpr int KeyColumn = 96;
     std::string paragraph;
     std::string row_key, row_value;
     const auto flush_paragraph = [&] {
         if (!paragraph.empty()) {
-            y = DrawWrapped(canvas, x, y, width, bottom, paragraph, TextDim);
+            y = DrawWrapped(canvas, x, y, width, bottom, paragraph, body);
             paragraph.clear();
         }
     };
     const auto flush_row = [&] {
         if (!row_key.empty()) {
             DrawText(canvas, font, x, y, row_key, Text, KeyColumn - 8);
-            y = DrawWrapped(canvas, x + KeyColumn, y, width - KeyColumn, bottom, row_value, TextDim);
+            y = DrawWrapped(canvas, x + KeyColumn, y, width - KeyColumn, bottom, row_value, body);
             row_key.clear();
             row_value.clear();
         }
@@ -388,7 +440,7 @@ void DrawPicker(const Canvas& canvas, const PickerView& view) {
     DrawText(canvas, SmallFont(), 40, 110, view.folder, TextDim, canvas.width - 80);
 
     constexpr int ListTop = 146, RowHeight = 54, ListLeft = 40;
-    const int list_width = canvas.width - 2 * ListLeft;
+    const int list_width = ListWidth;
     const int count = static_cast<int>(view.items.size());
     if (count == 0) {
         const char* message = "No folders or games here";
@@ -419,14 +471,21 @@ void DrawPicker(const Canvas& canvas, const PickerView& view) {
                  list_width - 76 - 48 - detail_width);
     }
     if (count > PickerVisibleRows) {
-        // Scroll bar.
+        // Scroll bar, at the list column's right edge.
         const int track = PickerVisibleRows * RowHeight - 6;
-        FillRoundRect(canvas, canvas.width - 30, ListTop, 4, track, 2, Color{255, 255, 255, 30});
+        FillRoundRect(canvas, ListLeft + ListWidth, ListTop, 4, track, 2, Color{255, 255, 255, 30});
         const int thumb = std::max(track * PickerVisibleRows / count, 24);
         const int offset = (track - thumb) * view.top / std::max(count - PickerVisibleRows, 1);
-        FillRoundRect(canvas, canvas.width - 30, ListTop + offset, 4, thumb, 2, Accent);
+        FillRoundRect(canvas, ListLeft + ListWidth, ListTop + offset, 4, thumb, 2, Accent);
         const std::string position = std::to_string(view.selected + 1) + " / " + std::to_string(count);
-        DrawText(canvas, SmallFont(), canvas.width - 40 - TextWidth(SmallFont(), position), 110, position, TextDim);
+        DrawText(canvas, SmallFont(), ListLeft + ListWidth - TextWidth(SmallFont(), position), 110, position, TextDim);
+    }
+    // The selected game's cover fills the right panel.
+    const int focused = std::clamp(view.selected, 0, std::max(count - 1, 0));
+    if (view.cover != nullptr && view.cover->IsValid()) {
+        DrawCoverImage(canvas, *view.cover);
+    } else if (count > 0 && !view.items[static_cast<std::size_t>(focused)].is_folder) {
+        DrawCoverPlaceholder(canvas);
     }
     DrawFooter(canvas, {{"A", "Open"}, {"B", "Back"}, {"X", "Options"}, {"Y", "Game options"}, {"+", "Exit"}});
 }
@@ -458,7 +517,8 @@ void DrawOptions(const Canvas& canvas, const OptionsView& view) {
         DrawText(canvas, BodyFont(), PanelLeft + 22, PanelTop + 18,
                  view.rows[static_cast<std::size_t>(view.selected)].label, Text, PanelWidth - 44);
     }
-    DrawHelp(canvas, PanelLeft + 22, PanelTop + 64, PanelWidth - 44, PanelTop + 440, view.help);
+    DrawHelp(canvas, PanelLeft + 22, PanelTop + 64, PanelWidth - 44, PanelTop + 440, view.help,
+             TextDim);
     DrawFooter(canvas, {{"<>", "Change"}, {"A", "Next value"}, {"B", "Back"}});
 }
 

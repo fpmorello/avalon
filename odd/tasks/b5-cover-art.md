@@ -30,7 +30,11 @@ Folders show no cover; a game with no cover shows a placeholder with the hint.
   PNG-only) + host test with an embedded image; cover drawing in `ui_render` (aspect-fit,
   rounded frame, placeholder with the convention hint) + preview checks. Loader DONE:
   ui_image_test green (3x2 decode with known pixels, junk/truncated/missing rejected,
-  >2048px rejected before decode); stb v2.34 vendored (public domain), PNG-only.
+  >2048px rejected before decode); stb v2.34 vendored (public domain), PNG-only. Renderer
+  DONE: list column 712 px, cover panel 464x520 on the right (aspect-fit, 10 px rounded
+  frame), placeholder with the convention hint for games without art, nothing for folders;
+  preview verified numerically (model cannot see images this session): gradient top/bottom
+  colours land where the geometry puts them, rounded corners and panel gap clean.
 - T3 (S1, S2, inline): picker integration (cover cache, load on selection change), version
   b5, CHANGELOG, README, NRO build. Commit: pending.
 
