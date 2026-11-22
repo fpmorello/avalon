@@ -112,8 +112,9 @@ protected:
     IR::Block ir_block;
 #ifdef __SWITCH__
     std::size_t emits_since_heap_check = 0;
-    /// Blocks in emission order, oldest first, for EvictOldestBlocks.
-    std::deque<IR::LocationDescriptor> emission_order;
+    /// Blocks in emission order, oldest first, for EvictOldestBlocks. The entry point
+    /// tells a block that is still alive from one invalidated or compiled again since.
+    std::deque<std::pair<IR::LocationDescriptor, CodePtr>> emission_order;
     /// Evictions since the last full clear; the clear is the fallback when they do not
     /// relieve the heap.
     unsigned evictions_since_clear = 0;

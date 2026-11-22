@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 
 namespace Dynarmic::Backend::Arm64 {
@@ -29,6 +30,28 @@ constexpr std::size_t EvictBlockCount(std::size_t live_blocks) noexcept {
     }
     const std::size_t quarter = live_blocks / 4;
     return quarter < MinToEvict ? MinToEvict : quarter;
+}
+
+/// Whether an entry of the emission queue still names the block that is alive at its
+/// location. A block that was invalidated, or invalidated and compiled again, leaves its
+/// old entry behind in the queue: evicting through that entry would drop the newest copy
+/// of the block as if it were the oldest. `block_entries` maps location -> entry point.
+template<typename BlockEntries, typename Location, typename EntryPoint>
+bool IsLiveEmission(const BlockEntries& block_entries, const Location& location, const EntryPoint& entry_point) {
+    const auto iter = block_entries.find(location);
+    return iter != block_entries.end() && iter->second == entry_point;
+}
+
+/// Drops from a block's list of referrers (the blocks that jump to it) the ones that no
+/// longer exist, and returns how many were dropped. The live ones are kept in order: they
+/// are what gets linked to the block again if it is evicted and later recompiled.
+template<typename Referrers, typename IsAlive>
+std::size_t PruneDeadReferrers(Referrers& referrers, IsAlive&& is_alive) {
+    const auto first_dead = std::remove_if(referrers.begin(), referrers.end(),
+                                           [&](const auto& entry_point) { return !is_alive(entry_point); });
+    const std::size_t dropped = static_cast<std::size_t>(referrers.end() - first_dead);
+    referrers.erase(first_dead, referrers.end());
+    return dropped;
 }
 
 } // namespace Dynarmic::Backend::Arm64

@@ -12,8 +12,13 @@
 #include "dynarmic/backend/arm64/jit_eviction.h"
 
 #include <cstdio>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 using Dynarmic::Backend::Arm64::EvictBlockCount;
+using Dynarmic::Backend::Arm64::IsLiveEmission;
+using Dynarmic::Backend::Arm64::PruneDeadReferrers;
 
 namespace {
 
@@ -27,9 +32,49 @@ int failures = 0;
         }                                                                      \
     } while (false)
 
+/// Guest location -> host entry point, as AddressSpace::block_entries.
+using BlockEntries = std::unordered_map<int, int>;
+
+void TestStaleQueueEntries() {
+    // Emission queue: A emitted at 100, B at 200; A invalidated and emitted again at 300;
+    // C emitted at 400 and then invalidated.
+    const BlockEntries entries{{'A', 300}, {'B', 200}};
+
+    // The first A is not the block that is alive now: evicting through it would drop the
+    // newest copy of A as if it were the oldest block.
+    CHECK(!IsLiveEmission(entries, int{'A'}, 100));
+    CHECK(IsLiveEmission(entries, int{'B'}, 200));
+    CHECK(IsLiveEmission(entries, int{'A'}, 300));
+    // An invalidated block has no entry at all.
+    CHECK(!IsLiveEmission(entries, int{'C'}, 400));
+    CHECK(!IsLiveEmission(BlockEntries{}, int{'A'}, 100));
+}
+
+void TestPruneDeadReferrers() {
+    // Blocks that jump to a target, by entry point; 20 and 40 were evicted.
+    const std::unordered_set<int> alive{10, 30, 50};
+    const auto is_alive = [&](int entry_point) { return alive.contains(entry_point); };
+
+    std::vector<int> referrers{10, 20, 30, 40, 50};
+    CHECK(PruneDeadReferrers(referrers, is_alive) == 2);
+    // The live referrers stay, in order: they are what a recompiled target is linked to.
+    CHECK((referrers == std::vector<int>{10, 30, 50}));
+    CHECK(PruneDeadReferrers(referrers, is_alive) == 0);
+
+    std::vector<int> all_dead{20, 40};
+    CHECK(PruneDeadReferrers(all_dead, is_alive) == 2);
+    CHECK(all_dead.empty());
+
+    std::vector<int> none;
+    CHECK(PruneDeadReferrers(none, is_alive) == 0);
+}
+
 } // namespace
 
 int main() {
+    TestStaleQueueEntries();
+    TestPruneDeadReferrers();
+
     // The heap-pressure trigger only fires with at least this many live blocks.
     constexpr std::size_t kTriggerFloor = 16384;
 

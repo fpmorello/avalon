@@ -278,15 +278,20 @@ CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     const CompileTimer timer;
     // Checked here and not in Emit(), which the loop below calls with a block it must keep.
     constexpr std::size_t MinBlocksToDrop = 16384;
-    if ((++emits_since_heap_check & 0x3FF) == 0 && block_infos.size() >= MinBlocksToDrop &&
-        HeapIsRunningLow()) {
-        // Throwing the whole cache away recompiles everything the game runs next; drop
-        // the oldest quarter first and keep the full clear as the fallback.
-        constexpr unsigned MaxEvictionsBeforeClear = 2;
-        if (evictions_since_clear >= MaxEvictionsBeforeClear ||
-            EvictOldestBlocks(EvictBlockCount(block_infos.size())) == 0) {
-            __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
-            ClearCache();
+    if ((++emits_since_heap_check & 0x3FF) == 0) {
+        if (!HeapIsRunningLow()) {
+            // The pressure is gone: later evictions start counting from zero again, so
+            // the full clear stays the answer to evictions that did not help.
+            evictions_since_clear = 0;
+        } else if (block_infos.size() >= MinBlocksToDrop) {
+            // Throwing the whole cache away recompiles everything the game runs next; drop
+            // the oldest quarter first and keep the full clear as the fallback.
+            constexpr unsigned MaxEvictionsBeforeClear = 2;
+            if (evictions_since_clear >= MaxEvictionsBeforeClear ||
+                EvictOldestBlocks(EvictBlockCount(block_infos.size())) == 0) {
+                __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
+                ClearCache();
+            }
         }
     }
 #endif
@@ -379,24 +384,27 @@ std::size_t AddressSpace::EvictOldestBlocks(std::size_t count) {
     UnprotectCodeMemory();
     std::size_t evicted = 0;
     while (evicted < count && !emission_order.empty()) {
-        const IR::LocationDescriptor descriptor = emission_order.front();
+        const auto [descriptor, entry_point] = emission_order.front();
         emission_order.pop_front();
-        const auto iter = block_entries.find(descriptor);
-        if (iter == block_entries.end()) {
-            // Invalidated earlier; its bookkeeping outside block_entries is released by
-            // the next full clear.
+        if (!IsLiveEmission(block_entries, descriptor, entry_point)) {
+            // Invalidated since, and maybe compiled again at another address: that newer
+            // block has its own, younger entry in the queue. InvalidateBasicBlocks left
+            // this one's per-block maps behind; release them now. Nothing links to it.
+            block_infos.erase(entry_point);
+            reverse_block_entries.erase(entry_point);
             continue;
         }
-        const CodePtr entry_point = iter->second;
-        // Same teardown as InvalidateBasicBlocks — unlink the referencers to the
+        // Same teardown as InvalidateBasicBlocks — unlink the referrers to the
         // dispatcher first — plus the per-block maps a full clear frees: they are the
         // memory this eviction exists to release. The emitted code itself is left
         // alone (the cursor is not rewound), so a core executing it runs on undisturbed.
+        // The list of referrers stays (RelinkForDescriptor drops the dead ones): if the
+        // block is compiled again, Emit links them straight to it instead of leaving
+        // them on the dispatcher for good.
         RelinkForDescriptor(descriptor, nullptr);
         block_infos.erase(entry_point);
         reverse_block_entries.erase(entry_point);
-        block_references.erase(descriptor);
-        block_entries.erase(iter);
+        block_entries.erase(descriptor);
         lookup_cache[LookupIndex(descriptor.Value())] = {};
         ++evicted;
     }
@@ -428,7 +436,7 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
 #ifdef __SWITCH__
     __atomic_fetch_add(&eden_horizon_jit_blocks, 1, __ATOMIC_RELAXED);
-    emission_order.push_back(block.Location());
+    emission_order.emplace_back(block.Location(), block_info.entry_point);
 #endif
 
     Link(block_info);
@@ -618,6 +626,20 @@ void AddressSpace::LinkBlockLinks(const CodePtr entry_point, const CodePtr targe
 }
 
 void AddressSpace::RelinkForDescriptor(IR::LocationDescriptor target_descriptor, CodePtr target_ptr) {
+#ifdef __SWITCH__
+    // Eviction removes blocks without visiting the lists they are registered in, so drop
+    // the referrers that are gone here, where the list is walked anyway, and do not keep
+    // an empty list per block.
+    const auto references = block_references.find(target_descriptor);
+    if (references == block_references.end()) {
+        return;
+    }
+    PruneDeadReferrers(references->second, [this](CodePtr code_ptr) { return block_infos.contains(code_ptr); });
+    if (references->second.empty()) {
+        block_references.erase(references);
+        return;
+    }
+#endif
     for (auto code_ptr : block_references[target_descriptor]) {
         if (auto block_iter = block_infos.find(code_ptr); block_iter != block_infos.end()) {
             const EmittedBlockInfo& block_info = block_iter->second;
