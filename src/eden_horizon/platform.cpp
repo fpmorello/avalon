@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "eden_horizon/platform.h"
+#include "eden_horizon/ui_render.h"
+#include "eden_horizon/ui_text.h"
 #include "eden_horizon/version.h"
 
 #include <algorithm>
@@ -12,6 +14,7 @@
 
 #include <dirent.h>
 #include <strings.h>
+#include <sys/stat.h>
 
 #include <switch.h>
 #include <switch2/memory/heap.h>
@@ -247,7 +250,62 @@ constexpr std::size_t NameColumns = 74;
 struct Entry {
     std::string name;
     bool is_folder;
+    std::uint64_t size = 0;
 };
+
+/// The graphical menu: a linear 1280x720 framebuffer on the default window. Open while the
+/// picker runs; closed before Vulkan takes the window. If it cannot be opened, the picker
+/// falls back to the text console it used before.
+class MenuScreen {
+public:
+    bool Open() {
+        if (framebufferCreate(&fb, nwindowGetDefault(), UiRender::ScreenWidth,
+                              UiRender::ScreenHeight, PIXEL_FORMAT_RGBA_8888, 2) != 0) {
+            return false;
+        }
+        if (framebufferMakeLinear(&fb) != 0) {
+            framebufferClose(&fb);
+            return false;
+        }
+        open = true;
+        UiRender::SetBuildLabel(EDEN_HORIZON_BUILD_ID);
+        return true;
+    }
+    void Close() {
+        if (open) {
+            framebufferClose(&fb);
+            open = false;
+        }
+    }
+    bool IsOpen() const {
+        return open;
+    }
+    template <typename DrawFn>
+    void Present(DrawFn&& draw) {
+        u32 stride = 0;
+        void* const pixels = framebufferBegin(&fb, &stride);
+        if (pixels != nullptr) {
+            draw(UiRender::Canvas{static_cast<std::uint8_t*>(pixels), UiRender::ScreenWidth,
+                                  UiRender::ScreenHeight, static_cast<int>(stride)});
+        }
+        framebufferEnd(&fb);
+    }
+
+private:
+    Framebuffer fb{};
+    bool open = false;
+};
+
+MenuScreen menu_screen;
+
+/// Between redraws the loops only poll the pad; about a frame is plenty.
+void IdleFrame() {
+    if (menu_screen.IsOpen()) {
+        svcSleepThread(16'000'000);
+    } else {
+        consoleUpdate(nullptr);
+    }
+}
 
 bool IsGameFile(const std::string& name) {
     const std::size_t dot = name.rfind('.');
@@ -275,7 +333,12 @@ std::vector<Entry> ListFolder(const std::string& folder) {
         }
         const bool is_folder = item->d_type == DT_DIR;
         if (is_folder || IsGameFile(name)) {
-            entries.push_back({name, is_folder});
+            std::uint64_t size = 0;
+            struct stat info;
+            if (!is_folder && stat((folder + name).c_str(), &info) == 0) {
+                size = static_cast<std::uint64_t>(info.st_size);
+            }
+            entries.push_back({name, is_folder, size});
         }
     }
     closedir(dir);
@@ -323,7 +386,7 @@ void WriteLastFolder(const std::string& folder) {
     }
 }
 
-void Draw(const std::string& folder, const std::vector<Entry>& entries, int selected, int top) {
+void DrawText(const std::string& folder, const std::vector<Entry>& entries, int selected, int top) {
     std::printf("\x1b[2J\x1b[1;1H");
     std::printf("\x1b[1mAvalon\x1b[0m - choose a game\n");
     std::printf("%.*s\n\n", static_cast<int>(NameColumns + 4), folder.c_str());
@@ -352,7 +415,7 @@ void Draw(const std::string& folder, const std::vector<Entry>& entries, int sele
     std::printf("Up/Down: move  A: open  B: back  X: options  Y: this game's options  +: exit");
 }
 
-void DrawOptions(const std::vector<MenuOption>& options, int selected, const std::string& title) {
+void DrawOptionsText(const std::vector<MenuOption>& options, int selected, const std::string& title) {
     std::printf("\x1b[2J\x1b[1;1H");
     std::printf("\x1b[1mAvalon %s\x1b[0m - %.60s\n\n\n", EDEN_HORIZON_BUILD_ID, title.c_str());
     for (int row = 0; row < static_cast<int>(options.size()); ++row) {
@@ -368,6 +431,44 @@ void DrawOptions(const std::vector<MenuOption>& options, int selected, const std
         std::printf("\x1b[22;1H%s", options[static_cast<std::size_t>(selected)].help.c_str());
     }
     std::printf("\x1b[44;1HUp/Down: move   Left/Right: change   B: back");
+}
+
+void Draw(const std::string& folder, const std::vector<Entry>& entries, int selected, int top) {
+    if (!menu_screen.IsOpen()) {
+        DrawText(folder, entries, selected, top);
+        return;
+    }
+    UiRender::PickerView view{folder, {}, selected, top};
+    view.items.reserve(entries.size());
+    for (const Entry& entry : entries) {
+        if (entry.is_folder) {
+            view.items.push_back({entry.name, "", "", true});
+        } else {
+            view.items.push_back({UiText::GameDisplayName(entry.name),
+                                  UiText::FileTypeLabel(entry.name),
+                                  UiText::SizeLabel(entry.size), false});
+        }
+    }
+    menu_screen.Present([&](const UiRender::Canvas& canvas) { UiRender::DrawPicker(canvas, view); });
+}
+
+void DrawOptions(const std::vector<MenuOption>& options, int selected, const std::string& title) {
+    if (!menu_screen.IsOpen()) {
+        DrawOptionsText(options, selected, title);
+        return;
+    }
+    UiRender::OptionsView view{title, {}, selected, {}};
+    for (const MenuOption& option : options) {
+        view.rows.push_back({option.label, option.choices[static_cast<std::size_t>(option.selected)]});
+    }
+    if (selected >= 0 && selected < static_cast<int>(options.size())) {
+        view.help = options[static_cast<std::size_t>(selected)].help;
+    }
+    // First letter up: the titles are written to follow "Avalon b4 - ".
+    if (!view.title.empty()) {
+        view.title[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(view.title[0])));
+    }
+    menu_screen.Present([&](const UiRender::Canvas& canvas) { UiRender::DrawOptions(canvas, view); });
 }
 
 /// Runs the options screen until the user leaves it. Returns false if the applet must exit.
@@ -403,7 +504,7 @@ bool RunOptionsScreen(std::vector<MenuOption>& options, const std::string& title
             DrawOptions(options, selected, title);
             redraw = false;
         }
-        consoleUpdate(nullptr);
+        IdleFrame();
     }
     return false;
 }
@@ -416,7 +517,9 @@ bool EditOptions(std::vector<MenuOption>& options, const std::string& title) {
 
 std::string BrowseForGame(std::vector<MenuOption>& options,
                           const std::function<void(const std::string&)>& edit_game) {
-    consoleInit(nullptr);
+    if (!menu_screen.Open()) {
+        consoleInit(nullptr);
+    }
     InitializeInput();
 
     std::string folder = ReadLastFolder();
@@ -454,10 +557,10 @@ std::string BrowseForGame(std::vector<MenuOption>& options,
                 ++selected;
             }
             if (pressed & HidNpadButton_AnyLeft) {
-                selected -= VisibleRows;
+                selected -= menu_screen.IsOpen() ? UiRender::PickerVisibleRows : VisibleRows;
             }
             if (pressed & HidNpadButton_AnyRight) {
-                selected += VisibleRows;
+                selected += menu_screen.IsOpen() ? UiRender::PickerVisibleRows : VisibleRows;
             }
             selected = std::clamp(selected, 0, std::max(count - 1, 0));
             redraw = true;
@@ -478,15 +581,20 @@ std::string BrowseForGame(std::vector<MenuOption>& options,
         }
 
         if (redraw) {
-            top = std::clamp(top, std::max(selected - VisibleRows + 1, 0), selected);
+            const int rows = menu_screen.IsOpen() ? UiRender::PickerVisibleRows : VisibleRows;
+            top = std::clamp(top, std::max(selected - rows + 1, 0), selected);
             Draw(folder, entries, selected, top);
             redraw = false;
         }
-        consoleUpdate(nullptr);
+        IdleFrame();
     }
 
     // Give the screen back before Vulkan takes the window.
-    consoleExit(nullptr);
+    if (menu_screen.IsOpen()) {
+        menu_screen.Close();
+    } else {
+        consoleExit(nullptr);
+    }
     return chosen;
 }
 

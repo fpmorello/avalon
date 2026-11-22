@@ -31,7 +31,9 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
   tiny canvas clipped); previews reviewed: help text re-wrapped and key/value rows laid out
   in two columns after the first preview showed 80-column breaks.
 - T3 (S2, S3, inline): `platform.cpp` picker/options on a linear framebuffer, closed
-  before Vulkan takes the window; icon wired into `nx_create_nro`. Commit: pending.
+  before Vulkan takes the window; icon wired into `nx_create_nro`. DONE: MenuScreen opens a
+  double-buffered linear RGBA8 framebuffer; text console kept as fallback if it fails;
+  page jumps use the 9 visible rows; `ninja eden-horizon` clean. Device check pending.
 - T4 (S5, inline): after a clean game shutdown Avalon asks the homebrew loader to start it
   again (envSetNextLoad), so the game list comes back in a fresh process; option "Return to
   the game list" (default on) turns it off. Commit: pending.

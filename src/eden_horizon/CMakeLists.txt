@@ -12,6 +12,9 @@ add_executable(eden-horizon
     platform.h
     profiler.cpp
     profiler.h
+    ui_render.cpp
+    ui_render.h
+    ui_text.h
     status_overlay.cpp
     status_overlay.h
     version.h)
@@ -39,4 +42,12 @@ nx_generate_nacp(
 
 nx_create_nro(eden-horizon
     OUTPUT ${CMAKE_BINARY_DIR}/bin/avalon.nro
+    ICON ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/icon.jpg
     NACP avalon.nacp)
+
+# ui_render.cpp embeds the generated assets (#embed): rebuild it when they change.
+set_property(SOURCE ui_render.cpp APPEND PROPERTY OBJECT_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/font_small.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/font_body.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/font_title.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/logo.bin)
