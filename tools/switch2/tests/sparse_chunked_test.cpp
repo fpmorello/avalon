@@ -128,6 +128,23 @@ void TestDestructorFrees() {
     CHECK(Common::SparseTestStats::ChunksLive() == 0);
 }
 
+void TestChunkBytesCountedOncePerChunk() {
+    // Threads racing to materialize the same chunk publish it once, and it is counted once.
+    const u64 before = Common::SparseChunkBytesInUse();
+    {
+        SparseLargeVector<u64> v(Common::SparseTestStats::ChunkEntriesFor<u64>() * 2);
+        std::vector<std::thread> threads;
+        for (std::size_t t = 0; t < 8; ++t) {
+            threads.emplace_back([&v, t] { v.Set(t, t + 1); }); // same chunk, own entry
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        CHECK(Common::SparseChunkBytesInUse() == before + 2 * 1024 * 1024);
+    }
+    CHECK(Common::SparseChunkBytesInUse() == before);
+}
+
 void TestConcurrentSet() {
     constexpr std::size_t kChunkEntries = Common::SparseTestStats::ChunkEntriesFor<u64>();
     constexpr int kThreads = 4;
@@ -191,6 +208,7 @@ int main() {
     TestZeroRegion();
     TestResizeAndClear();
     TestDestructorFrees();
+    TestChunkBytesCountedOncePerChunk();
     TestConcurrentSet();
     TestOtherTypes();
 

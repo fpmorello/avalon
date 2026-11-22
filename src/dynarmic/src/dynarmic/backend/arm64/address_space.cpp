@@ -390,7 +390,10 @@ std::size_t AddressSpace::EvictOldestBlocks(std::size_t count) {
             // Invalidated since, and maybe compiled again at another address: that newer
             // block has its own, younger entry in the queue. InvalidateBasicBlocks left
             // this one's per-block maps behind; release them now. Nothing links to it.
-            block_infos.erase(entry_point);
+            // It still counted as a compiled block, as it does for ClearCache.
+            if (block_infos.erase(entry_point) != 0) {
+                __atomic_fetch_sub(&eden_horizon_jit_blocks, 1, __ATOMIC_RELAXED);
+            }
             reverse_block_entries.erase(entry_point);
             continue;
         }

@@ -48,6 +48,12 @@ void TestStaleQueueEntries() {
     // An invalidated block has no entry at all.
     CHECK(!IsLiveEmission(entries, int{'C'}, 400));
     CHECK(!IsLiveEmission(BlockEntries{}, int{'A'}, 100));
+
+    // Compiled three times: only the newest entry point is the live block.
+    const BlockEntries thrice{{'A', 500}};
+    CHECK(!IsLiveEmission(thrice, int{'A'}, 100));
+    CHECK(!IsLiveEmission(thrice, int{'A'}, 300));
+    CHECK(IsLiveEmission(thrice, int{'A'}, 500));
 }
 
 void TestPruneDeadReferrers() {
@@ -67,6 +73,10 @@ void TestPruneDeadReferrers() {
 
     std::vector<int> none;
     CHECK(PruneDeadReferrers(none, is_alive) == 0);
+
+    std::vector<int> all_alive{7};
+    CHECK(PruneDeadReferrers(all_alive, [](int) { return true; }) == 0);
+    CHECK((all_alive == std::vector<int>{7}));
 }
 
 } // namespace

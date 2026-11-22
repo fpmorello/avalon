@@ -31,8 +31,10 @@ b1 review, makes the page-table memory visible in the log, and documents it. Bra
   per-core sizing from last session's lists applies in every mode; stale "flat array" comments
   in k_process.cpp / k_page_table_base.cpp updated. No host test possible (frontend + core are
   Switch-only code paths); checked by the NRO build and on device.
-- T4 (S4, inline): `version.h` b2, CHANGELOG.md, NRO build. Commit: pending.
-- T5 (S1-S4, gentle-ai-verify): independent verification (high risk: JIT bookkeeping).
+- T4 (S4, inline): `version.h` b2, CHANGELOG.md, NRO build. DONE: cab9e2465d; rebuilt after
+  the T5 fix (see Log L5).
+- T5 (S1-S4, gentle-ai-verify): independent verification (high risk: JIT bookkeeping). DONE:
+  S1, S2, S4 PASS; S3 PASS after fixing its one finding (L5). JIT paths not executed on host.
 
 ## Log
 
@@ -50,3 +52,9 @@ b1 review, makes the page-table memory visible in the log, and documents it. Bra
   re-linked directly instead of through the dispatcher forever; (c) the eviction counter resets
   when a heap check finds the heap no longer low (review: "eviction counter never decays");
   (d) the counter covers every SparseLargeVector (guest page table, device and GPU tables).
+- L5 (verify finding, fixed): releasing a stale queue entry erased `block_infos` without
+  decrementing `eden_horizon_jit_blocks`, so the logged `JIT blocks` would drift upward. Fixed
+  in EvictOldestBlocks; added the verifier's regression tests (chunk counted once under a
+  publication race; thrice-compiled block live only through its newest entry point). Open
+  advisory: referrer lists of evicted blocks that are never recompiled stay until ClearCache.
+  Device check pending (user): `JIT blocks` returns to ~0 after a cache clear.
