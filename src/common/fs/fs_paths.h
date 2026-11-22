@@ -8,7 +8,12 @@
 
 // yuzu data directories
 
+#ifdef __SWITCH__
+// The Switch 2 homebrew is installed next to stock Eden under its own name (Avalon).
+inline constexpr const char *EDEN_DIR = "avalon";
+#else
 inline constexpr const char *EDEN_DIR = "eden";
+#endif
 inline constexpr const char *PORTABLE_DIR = "user";
 
 // Sub-directories contained within a yuzu data directory
@@ -39,6 +44,10 @@ inline constexpr const char *SUYU_DIR = "suyu";
 inline constexpr const char *RYUJINX_DIR = "Ryujinx";
 
 // yuzu-specific files
+#ifdef __SWITCH__
+inline constexpr const char *LOG_FILE = "avalon_log.txt";
+#else
 inline constexpr const char *LOG_FILE = "eden_log.txt";
+#endif
 inline constexpr const char *LOSSLESS_DLL_FILE = "Lossless.dll";
 inline constexpr const char *LOSSLESS_CACHE_FILE = "lsfg_spirv.cache";

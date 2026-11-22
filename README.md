@@ -55,13 +55,13 @@ Known limits:
 ## Using it
 
 1. Copy `avalon.nro` to `sdmc:/switch/`.
-2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/avalon/.local/share/eden/keys/`.
+2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/avalon/.local/share/avalon/keys/`.
 3. Start it from the homebrew menu and choose a game file. **X** opens the options for
    every game, and **Y** the options of the game under the cursor, which start out
    inheriting the general ones.
 4. Hold **+** and **−** together to leave the game.
 
-The log is written to `sdmc:/switch/avalon/.local/share/eden/log/eden_log.txt`.
+The log is written to `sdmc:/switch/avalon/.local/share/avalon/log/avalon_log.txt`.
 
 To check the JIT's two-level page table lookup on your console, create an empty file
 `sdmc:/switch/avalon/test_pagetable.txt` and start the emulator. The file is removed, a
