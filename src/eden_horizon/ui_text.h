@@ -77,6 +77,33 @@ inline std::string GameDisplayName(std::string_view file_name) {
     return name.empty() ? Detail::Tidy(stem) : name;
 }
 
+/// The Title ID of a dump's name: the first `[16 hex digits]` group, lower case and
+/// without brackets, or empty when there is none. This is the name cover art uses
+/// (`0100e6d00e81c000.png`), the convention Eden's own icons follow.
+inline std::string TitleIdOf(std::string_view file_name) {
+    for (std::size_t open = file_name.find('['); open != std::string_view::npos;
+         open = file_name.find('[', open + 1)) {
+        const std::size_t digits = open + 1;
+        const std::size_t close = file_name.find(']', digits);
+        if (close != digits + 16) {
+            continue;
+        }
+        std::string id;
+        for (std::size_t i = digits; i < close; ++i) {
+            const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(file_name[i])));
+            if (std::isxdigit(static_cast<unsigned char>(c)) == 0) {
+                id.clear();
+                break;
+            }
+            id += c;
+        }
+        if (!id.empty()) {
+            return id;
+        }
+    }
+    return {};
+}
+
 /// "NSP", "XCI"...: the extension in capitals, or empty.
 inline std::string FileTypeLabel(std::string_view file_name) {
     const std::size_t dot = file_name.rfind('.');

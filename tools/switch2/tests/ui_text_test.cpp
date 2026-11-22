@@ -12,6 +12,7 @@
 #include <string>
 
 using UiText::FileTypeLabel;
+using UiText::TitleIdOf;
 using UiText::GameDisplayName;
 using UiText::SizeLabel;
 
@@ -48,6 +49,19 @@ void TestGameDisplayName() {
     CHECK(GameDisplayName("Odd [name.nsp") == "Odd [name");
 }
 
+void TestTitleIdOf() {
+    CHECK(TitleIdOf("Little Racer [0100E6D00E81C000][v0][Base].nsp") == "0100e6d00e81c000");
+    CHECK(TitleIdOf("Game [010028600EBDA000] [v0].nsp") == "010028600ebda000");
+    CHECK(TitleIdOf("Minecraft Dungeons 2 [0100A7C01B792000][v0][Base].xci") == "0100a7c01b792000");
+    // Too short, not hex, too long: no title id.
+    CHECK(TitleIdOf("Game [0100E6D].nsp") == "");
+    CHECK(TitleIdOf("Game [notatitleid0000].nsp") == "");
+    CHECK(TitleIdOf("Game [0100E6D00E81C0000].nsp") == "");
+    CHECK(TitleIdOf("Little Racer.nsp") == "");
+    // Uppercase hex in the name still comes out lower case.
+    CHECK(TitleIdOf("G [0100ABCDEF012345].nsp") == "0100abcdef012345");
+}
+
 void TestFileTypeLabel() {
     CHECK(FileTypeLabel("a.nsp") == "NSP");
     CHECK(FileTypeLabel("a.XCI") == "XCI");
@@ -71,6 +85,7 @@ void TestSizeLabel() {
 
 int main() {
     TestGameDisplayName();
+    TestTitleIdOf();
     TestFileTypeLabel();
     TestSizeLabel();
     if (failures != 0) {
