@@ -130,16 +130,15 @@ std::vector<Platform::MenuOption> DefaultOptions() {
          "Console mode and internal resolution, under the FPS.",
          {"on", "off"}, 0},
         {"address_space", "Address space",
-         "How much address space most games get. The emulator keeps a table that\n"
-         "covers all of it in memory, so a smaller space leaves more memory for the\n"
-         "game and for compiled code.\n\n"
-         "compact  64 GiB, table of 128 MiB. The most free memory. A few games\n"
-         "         abort when they start with it.\n"
-         "game     256 GiB, table of 512 MiB. For games that fail in compact.\n"
-         "full     512 GiB as on the console, table of 1 GiB. Long sessions may\n"
-         "         run out of memory. Only if a game fails in the other two.\n\n"
-         "Start with compact. Give a game that does not start its own value with Y.",
-         {"compact", "game", "full"}, 0, true},
+         "How much address space most games get. The table that covers it is only\n"
+         "allocated where the game maps memory, so the size costs almost nothing.\n\n"
+         "full     512 GiB, as on the console. What games expect.\n"
+         "game     256 GiB, with the console's layout.\n"
+         "compact  64 GiB, with a different layout. A few games abort when they\n"
+         "         start with it.\n\n"
+         "Start with full. The smaller ones remain for a game that misbehaves\n"
+         "with it: give that game its own value with Y.",
+         {"compact", "game", "full"}, 2, true},
         {"gpu", "GPU emulation",
          "accurate follows the console's GPU closely. fast skips some of the waits\n"
          "between the game and the GPU, as Eden does on phones: quicker in heavy\n"

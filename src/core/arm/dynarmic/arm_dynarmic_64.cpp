@@ -257,13 +257,13 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
 #if defined(__SWITCH__)
     // One cache per emulated core, and kaiHEN keeps a second copy of each for writing.
     // A full cache is dropped whole and its code compiled again, which shows as seconds
-    // of stutter: use the larger size when the compact address space leaves room for it.
-    config.code_cache_size =
-        std::uint32_t(eden_horizon_compact_address_space != 0 ? 64_MiB : 32_MiB);
+    // of stutter. The guest page table is allocated on demand now, so every address
+    // space mode has room for the larger size.
+    config.code_cache_size = std::uint32_t(64_MiB);
     // With last session's lists the caches follow what each core needed: the busiest core
     // outgrows 64 MiB while another may sit idle.
     if (const unsigned megabytes = eden_horizon_jit_cache_megabytes(int(m_core_index));
-        megabytes != 0 && eden_horizon_compact_address_space != 0) {
+        megabytes != 0) {
         config.code_cache_size = megabytes * std::uint32_t(1_MiB);
     }
     LOG_INFO(Core_ARM, "Core {} code cache: {} MiB", m_core_index, config.code_cache_size >> 20);

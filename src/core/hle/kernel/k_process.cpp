@@ -1221,11 +1221,11 @@ Result KProcess::LoadFromMetadata(KernelCore& kernel, const FileSys::ProgramMeta
     // Set the address space type and code address.
     auto address_space_type = metadata.GetAddressSpaceType();
 #ifdef __SWITCH__
-    // The page table is a flat array that this host cannot leave unbacked: 1 GiB for 39
-    // bits, 128 MiB for 36. The frontend may ask for the smaller space regardless.
+    // The frontend may ask for the smaller space: it was the way to save page table
+    // memory before the table was allocated on demand, and stays as an option.
     if (eden_horizon_compact_address_space == 1 &&
         address_space_type == FileSys::ProgramAddressSpaceType::Is39Bit) {
-        LOG_WARNING(Kernel, "Giving a 39-bit program a 36-bit address space to save memory");
+        LOG_WARNING(Kernel, "Giving a 39-bit program a 36-bit address space, as the address space option asks");
         address_space_type = FileSys::ProgramAddressSpaceType::Is36Bit;
     }
 #endif

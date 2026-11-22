@@ -27,7 +27,10 @@ b1 review, makes the page-table memory visible in the log, and documents it. Bra
   shown in `Memory detail`. DONE: counter lives in sparse_large_vector.h (SparseChunkBytesInUse),
   not stats.h, so the host test covers it; RED = "no member named SparseChunkBytesInUse"; GREEN.
 - T3 (S1, inline): default `full`, code cache 64 MiB in every mode, option help text, README.
-  Commit: pending.
+  DONE: option default index 2 + rewritten help; arm_dynarmic_64/32 always 64 MiB and the
+  per-core sizing from last session's lists applies in every mode; stale "flat array" comments
+  in k_process.cpp / k_page_table_base.cpp updated. No host test possible (frontend + core are
+  Switch-only code paths); checked by the NRO build and on device.
 - T4 (S4, inline): `version.h` b2, CHANGELOG.md, NRO build. Commit: pending.
 - T5 (S1-S4, gentle-ai-verify): independent verification (high risk: JIT bookkeeping).
 

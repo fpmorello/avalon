@@ -208,9 +208,9 @@ Result KPageTableBase::InitializeForProcess(Svc::CreateProcessFlag as_type, bool
     // Calculate region extents.
     size_t as_width = GetAddressSpaceWidth(as_type);
 #ifdef __SWITCH__
-    // The page table is a flat array this host cannot leave unbacked, 1 GiB of it for 39
-    // bits. The regions of a 39-bit process add up to under 256 GiB, so they fit in 38 bits
-    // and half the table; only the room left for address randomization shrinks.
+    // The "game" address space option: the regions of a 39-bit process add up to under
+    // 256 GiB, so they fit in 38 bits; only the room left for address randomization
+    // shrinks. It halved the page table when that was a flat array, and stays as an option.
     const bool narrowed = as_width == 39 && eden_horizon_compact_address_space == 2;
     if (narrowed) {
         as_width = 38;

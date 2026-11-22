@@ -29,7 +29,7 @@ inestable, aunque ya mejoró bastante. No reportes fallos de este port al proyec
 | Luigi's Mansion 2 HD | Playable: correct picture, audio, controls, gyro, rumble, saves |
 | The Legend of Zelda: Echoes of Wisdom | Playable at 30 fps and above; stutters when entering new areas, rifts are only drawn from the raised camera, and loading a save sometimes hangs |
 | Super Mario 3D World + Bowser's Fury | Plays near 60 fps with occasional drops; only tested for a few minutes |
-| Mario Strikers: Battle League | Unreliable: needs *Address space* `game` or `full`; some starts get past the intro and play at 60 fps, others stay on a black screen |
+| Mario Strikers: Battle League | Unreliable: needs *Address space* `game` or `full` (`full` is the default); some starts get past the intro and play at 60 fps, others stay on a black screen |
 | Kirby and the Forgotten Land | Starts and plays, but drops to 15-20 fps inside levels |
 
 Nothing else has been tested.
