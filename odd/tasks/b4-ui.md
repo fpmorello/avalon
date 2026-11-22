@@ -36,7 +36,10 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
   page jumps use the 9 visible rows; `ninja eden-horizon` clean. Device check pending.
 - T4 (S5, inline): after a clean game shutdown Avalon asks the homebrew loader to start it
   again (envSetNextLoad), so the game list comes back in a fresh process; option "Return to
-  the game list" (default on) turns it off. Commit: pending.
+  the game list" (default on) turns it off. DONE: PumpEvents marks QuitByUser() only for
+  + and -, so a system-side close does not relaunch; RequestRelaunch checks envHasNextLoad
+  and passes argv[0]; `ninja eden-horizon` clean. Device check pending (does the kaiHEN
+  loader honour envSetNextLoad?).
 - T5 (S4, inline): version b4, CHANGELOG, README, NRO build. Commit: pending.
 
 ## Log

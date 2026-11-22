@@ -160,6 +160,11 @@ std::vector<Platform::MenuOption> DefaultOptions() {
         {"shader_cache", "Shader cache on disk",
          "Keeps compiled shaders between sessions, so they stutter only once.",
          {"on", "off"}, 0},
+        {"return_to_list", "Return to the game list",
+         "After leaving a game with + and -, Avalon starts again and shows the game list,\n"
+         "instead of going back to the homebrew menu. It restarts as a fresh program, so a\n"
+         "game always gets all the memory.",
+         {"on", "off"}, 0},
     };
 }
 
@@ -725,6 +730,11 @@ int main(int argc, char** argv) {
     system.reset();
     input_subsystem->Shutdown();
     LOG_INFO(Frontend, "Shut down cleanly");
+    if (OptionIs(options, "return_to_list", "on") && Platform::QuitByUser() && argc > 0) {
+        const bool relaunch = Platform::RequestRelaunch(argv[0]);
+        LOG_INFO(Frontend, "Return to the game list: {}",
+                 relaunch ? "relaunching" : "not supported by the loader");
+    }
     Common::Log::Stop();
     return 0;
 }

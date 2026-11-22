@@ -193,6 +193,24 @@ void SetVibration(const Vibration& left, const Vibration& right) {
     hidSendVibrationValues(devices.motors, values, 2);
 }
 
+namespace {
+/// Set when the game was left with + and - rather than closed by the system.
+bool quit_by_user = false;
+} // namespace
+
+bool QuitByUser() {
+    return quit_by_user;
+}
+
+bool RequestRelaunch(const std::string& nro_path) {
+    if (nro_path.empty() || !envHasNextLoad()) {
+        return false;
+    }
+    // The argument string starts with the program's own path, as the loader passes it.
+    const std::string arguments = "\"" + nro_path + "\"";
+    return R_SUCCEEDED(envSetNextLoad(nro_path.c_str(), arguments.c_str()));
+}
+
 bool PumpEvents(PadSnapshot& out) {
     if (!appletMainLoop()) {
         return false;
@@ -225,6 +243,7 @@ bool PumpEvents(PadSnapshot& out) {
 
     const u64 held = padGetButtons(&pad);
     if ((held & HidNpadButton_Plus) && (held & HidNpadButton_Minus)) {
+        quit_by_user = true;
         return false;
     }
     // libnx's first 16 button bits are in VirtualButton order.

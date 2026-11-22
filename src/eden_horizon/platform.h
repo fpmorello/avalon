@@ -79,6 +79,14 @@ void SetVibration(const Vibration& left, const Vibration& right);
 /// Returns false when the applet must exit or the user asked to quit (+ and - held).
 bool PumpEvents(PadSnapshot& pad);
 
+/// Whether PumpEvents stopped because the user held + and -, not because the system
+/// closed the applet.
+bool QuitByUser();
+
+/// Asks the homebrew loader to start `nro_path` again once this program ends, so the game
+/// list comes back in a fresh process. Returns false if the loader cannot do it.
+bool RequestRelaunch(const std::string& nro_path);
+
 /// A setting shown on the picker's options screen.
 struct MenuOption {
     std::string key;                  ///< Name in the settings file
