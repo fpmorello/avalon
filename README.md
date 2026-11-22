@@ -58,9 +58,12 @@ Known limits:
 1. Copy `avalon.nro` to `sdmc:/switch/`.
 2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/avalon/.local/share/avalon/keys/`.
 3. Start it from the homebrew menu. The game list shows each game's readable name, file
-   type and size; folders open with **A**. **X** opens the options for every game, and
-   **Y** the options of the game under the cursor, which start out inheriting the general
-   ones.
+   type and size, and the selected game's cover; folders open with **A**. **X** opens the
+   options for every game, and **Y** the options of the game under the cursor, which start
+   out inheriting the general ones.
+   Covers: put a PNG next to the game, named after the title id in the game's file name
+   (`0100e6d00e81c000.png`) or after the game file itself (`Little Racer [....nsp]` with
+   the extension changed to `.png`). Up to 2048x2048.
 4. Hold **+** and **−** together to leave the game. Avalon then starts again into the game
    list, unless "Return to the game list" is off.
 

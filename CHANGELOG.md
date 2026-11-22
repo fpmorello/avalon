@@ -4,6 +4,18 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b5 — 2026-11-22 (`sw2-fork-b5`)
+
+Branch `feat/b5-cover-art`.
+
+- **Cover art in the picker** (`eden_horizon`): the selected game's cover shows on the
+  right of the list, aspect-fitted in a rounded frame. Covers are user-supplied PNGs next
+  to the ROM, named after the title id in the dump's name (`0100e6d00e81c000.png`,
+  Eden's own icon convention) or after the game file with a `.png` extension; up to
+  2048x2048. Games without art show a placeholder that explains the naming. PNG decoding
+  is a vendored stb_image v2.34 (public domain), PNG only, with host tests.
+- Repo moved to `~/Proyectos/Personales/avalon`.
+
 ## b4 — 2026-11-22 (`sw2-fork-b4`)
 
 Branch `feat/b4-ui`.

@@ -12,6 +12,8 @@ add_executable(eden-horizon
     platform.h
     profiler.cpp
     profiler.h
+    ui_image.cpp
+    ui_image.h
     ui_render.cpp
     ui_render.h
     ui_text.h

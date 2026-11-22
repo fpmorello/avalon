@@ -36,7 +36,8 @@ Folders show no cover; a game with no cover shows a placeholder with the hint.
   preview verified numerically (model cannot see images this session): gradient top/bottom
   colours land where the geometry puts them, rounded corners and panel gap clean.
 - T3 (S1, S2, inline): picker integration (cover cache, load on selection change), version
-  b5, CHANGELOG, README, NRO build. Commit: pending.
+  b5, CHANGELOG, README, NRO build. DONE: CoverCache decodes at most one PNG per selection
+  change (title id first, then file stem); build below.
 
 ## Log
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "eden_horizon/platform.h"
+#include "eden_horizon/ui_image.h"
 #include "eden_horizon/ui_render.h"
 #include "eden_horizon/ui_text.h"
 #include "eden_horizon/version.h"
@@ -317,6 +318,51 @@ private:
 
 MenuScreen menu_screen;
 
+/// The cover of the game under the cursor, decoded once per game.
+class CoverCache {
+public:
+    /// The cover to show for `folder + entry`, or null. Decodes at most one PNG per
+    /// selection change; folders and games without art give nullptr.
+    const UiImage::Image* Get(const std::string& folder, const Entry& entry) {
+        if (entry.is_folder) {
+            return nullptr;
+        }
+        for (const std::string& candidate : CoverPaths(folder, entry)) {
+            if (candidate == cached_path) {
+                return &cached;
+            }
+            UiImage::Image image;
+            if (UiImage::LoadPng(candidate.c_str(), image)) {
+                cached_path = candidate;
+                cached = std::move(image);
+                return &cached;
+            }
+        }
+        cached_path.clear();
+        cached = {};
+        return nullptr;
+    }
+
+private:
+    /// The convention's candidate file names, best first (see odd/tasks/b5-cover-art.md).
+    static std::vector<std::string> CoverPaths(const std::string& folder, const Entry& entry) {
+        std::vector<std::string> paths;
+        if (const std::string title_id = UiText::TitleIdOf(entry.name); !title_id.empty()) {
+            paths.push_back(folder + title_id + ".png");
+        }
+        const std::string stem = UiText::StemOf(entry.name);
+        if (!stem.empty()) {
+            paths.push_back(folder + stem + ".png");
+        }
+        return paths;
+    }
+
+    std::string cached_path;
+    UiImage::Image cached;
+};
+
+CoverCache cover_cache;
+
 /// Between redraws the loops only poll the pad; about a frame is plenty.
 void IdleFrame() {
     if (menu_screen.IsOpen()) {
@@ -459,6 +505,7 @@ void Draw(const std::string& folder, const std::vector<Entry>& entries, int sele
     }
     UiRender::PickerView view{folder, {}, selected, top};
     view.items.reserve(entries.size());
+    const Entry* focused = nullptr;
     for (const Entry& entry : entries) {
         if (entry.is_folder) {
             view.items.push_back({entry.name, "", "", true});
@@ -467,6 +514,12 @@ void Draw(const std::string& folder, const std::vector<Entry>& entries, int sele
                                   UiText::FileTypeLabel(entry.name),
                                   UiText::SizeLabel(entry.size), false});
         }
+        if (&entry - entries.data() == selected) {
+            focused = &entry;
+        }
+    }
+    if (focused != nullptr) {
+        view.cover = cover_cache.Get(folder, *focused);
     }
     menu_screen.Present([&](const UiRender::Canvas& canvas) { UiRender::DrawPicker(canvas, view); });
 }
