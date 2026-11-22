@@ -57,7 +57,9 @@ inline constexpr std::size_t SparseChunkBytes = 2 * 1024 * 1024;
 /// materialized points here, so dynarmic's two-level page table lookup can load through
 /// any slot without a null check (odd/tasks/two-level-page-table.md). Never written; it
 /// lives in .bss, so it costs no file size.
-alignas(64) inline const u8 SparseZeroChunk[SparseChunkBytes]{};
+// Not const on purpose: a const array would carry its zeros in .rodata and cost 2 MiB of
+// NRO file size; in .bss they are free. It is never written (see ZeroChunk).
+alignas(64) inline u8 SparseZeroChunk[SparseChunkBytes];
 
 /// Bytes of materialized chunks over every vector: what the page tables really cost.
 inline std::atomic<u64> SparseChunkBytesLive{0};
@@ -370,9 +372,7 @@ private:
         return ((index * sizeof(T)) % ChunkBytes) / sizeof(T);
     }
     static T* ZeroChunk() noexcept {
-        // Read-only storage: the chunk is never written, only compared against and read
-        // through, so the const cast cannot hand out writable memory by accident of use.
-        return reinterpret_cast<T*>(const_cast<u8*>(SparseZeroChunk));
+        return reinterpret_cast<T*>(SparseZeroChunk);
     }
     /// The materialized chunk holding index, or nullptr if it has none.
     T* ChunkSlotRead(std::size_t index) const noexcept {
