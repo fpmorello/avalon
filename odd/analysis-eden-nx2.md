@@ -60,6 +60,8 @@ Ranked by value to us; hashes are their commits.
 
 1. **NSZ/XCZ** — port their `ncz_decompressor.cpp` changes (GPL, same upstream; attribute
    in the commit). Removes user friction, moderate risk (cache correctness).
+   **ADOPTED in b7 (`feat/b7-nsz`)**: our files were byte-identical to their base, so the
+   port is whole-file; plus their vfs_real cached-file close fix.
 2. **Updates & DLC** — their discovery + picker logic, adapted to our UI. May fix
    Minecraft Dungeons 2 (ErrorNoExeFS needs the update NCA).
 3. **Return to launcher on load failure** — replace our `ExitProcess()`-to-HOME with
