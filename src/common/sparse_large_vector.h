@@ -58,6 +58,12 @@ inline constexpr std::size_t SparseChunkBytes = 2 * 1024 * 1024;
 /// any slot without a null check (odd/tasks/two-level-page-table.md). Never written; it
 /// lives in .bss, so it costs no file size.
 alignas(64) inline u8 SparseZeroChunk[SparseChunkBytes];
+
+/// Bytes of materialized chunks over every vector: what the page tables really cost.
+inline std::atomic<u64> SparseChunkBytesLive{0};
+inline u64 SparseChunkBytesInUse() noexcept {
+    return SparseChunkBytesLive.load(std::memory_order_relaxed);
+}
 #endif
 
 #if defined(EDEN_CHUNKED_SPARSE_VECTOR)
@@ -390,6 +396,7 @@ private:
         // the entry through the slot is ordered after the load of the slot.
         T* expected = ZeroChunk();
         if (chunk_map[slot].compare_exchange_strong(expected, fresh, std::memory_order_acq_rel)) {
+            SparseChunkBytesLive.fetch_add(ChunkBytes, std::memory_order_relaxed);
             return fresh;
         }
         std::free(fresh);
@@ -419,6 +426,7 @@ private:
                 continue;
             }
             std::free(chunk);
+            SparseChunkBytesLive.fetch_sub(ChunkBytes, std::memory_order_relaxed);
 #if defined(EDEN_CHUNKED_SPARSE_VECTOR)
             SparseTestChunksLive.fetch_sub(1, std::memory_order_relaxed);
 #endif

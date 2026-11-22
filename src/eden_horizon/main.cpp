@@ -28,6 +28,7 @@
 #include "common/horizon/stats.h"
 #include "common/fs/path_util.h"
 #include "common/logging.h"
+#include "common/sparse_large_vector.h"
 #include "common/scm_rev.h"
 #include "common/settings.h"
 #include "core/core.h"
@@ -478,9 +479,11 @@ public:
                  count - last_count, (bytes - last_bytes) >> 10, (micros - last_micros) / 1000,
                  (compile - last_compile) / 1000);
         LOG_INFO(Frontend,
-                 "Memory detail: textures {} MiB, buffers {} MiB, JIT blocks {}, cache clears {} ({} "
-                 "for heap, {} blocks evicted first), warmed {} blocks in {} ms, {} textures evicted",
-                 eden_horizon_texture_bytes >> 20, eden_horizon_buffer_bytes >> 20,
+                 "Memory detail: page tables {} MiB, textures {} MiB, buffers {} MiB, JIT blocks {}, "
+                 "cache clears {} ({} for heap, {} blocks evicted first), warmed {} blocks in {} ms, "
+                 "{} textures evicted",
+                 Common::SparseChunkBytesInUse() >> 20, eden_horizon_texture_bytes >> 20,
+                 eden_horizon_buffer_bytes >> 20,
                  eden_horizon_jit_blocks, eden_horizon_jit_cache_clears,
                  eden_horizon_jit_heap_clears, eden_horizon_jit_partial_evictions,
                  eden_horizon_jit_warm_blocks, eden_horizon_jit_warm_micros / 1000,

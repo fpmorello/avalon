@@ -136,6 +136,28 @@ void TestResizeResetsDirectory() {
     CHECK(ChunkIsZero(zero));
 }
 
+void TestChunkBytesCounter() {
+    // What the frontend logs as page-table memory: bytes of materialized chunks, all vectors.
+    constexpr u64 kChunk = 2 * 1024 * 1024;
+    CHECK(Common::SparseChunkBytesInUse() == 0);
+    {
+        Vector a(kEntries * 4);
+        Vector b(kEntries * 2);
+        CHECK(Common::SparseChunkBytesInUse() == 0);
+        a.Set(0, 1);
+        a.Set(1, 2); // same chunk
+        CHECK(Common::SparseChunkBytesInUse() == kChunk);
+        a.Set(kEntries * 3, 3);
+        b.GetUnchecked(kEntries) = 4;
+        CHECK(Common::SparseChunkBytesInUse() == 3 * kChunk);
+        (void)a[kEntries * 2]; // reads never allocate
+        CHECK(Common::SparseChunkBytesInUse() == 3 * kChunk);
+        a.ResizeAndClear(kEntries * 8);
+        CHECK(Common::SparseChunkBytesInUse() == kChunk);
+    }
+    CHECK(Common::SparseChunkBytesInUse() == 0);
+}
+
 void TestDirectoryCoversEveryPageIndex() {
     // 32/36/38/39-bit tables with 4 KiB pages: the JIT's last level-1 index must be in range.
     for (std::size_t bits : {32u, 36u, 38u, 39u}) {
@@ -156,6 +178,7 @@ int main() {
     TestWritesAreVisibleThroughDirectory();
     TestZeroRegionClearsThroughDirectory();
     TestResizeResetsDirectory();
+    TestChunkBytesCounter();
     TestDirectoryCoversEveryPageIndex();
     CHECK(Common::SparseTestStats::ChunksLive() == 0);
     if (failures != 0) {

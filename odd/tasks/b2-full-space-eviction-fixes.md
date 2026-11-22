@@ -24,7 +24,8 @@ b1 review, makes the page-table memory visible in the log, and documents it. Bra
   `tools/switch2/tests/jit_eviction_test.cpp`; use it in `address_space.{h,cpp}`. DONE: RED = only
   "no member named IsLiveEmission/PruneDeadReferrers"; GREEN ASan+TSan; `ninja dynarmic` clean.
 - T2 (S2, inline): chunk byte counter in `common/horizon/stats.h` fed by `SparseLargeVector`,
-  shown in `Memory detail`. Commit: pending.
+  shown in `Memory detail`. DONE: counter lives in sparse_large_vector.h (SparseChunkBytesInUse),
+  not stats.h, so the host test covers it; RED = "no member named SparseChunkBytesInUse"; GREEN.
 - T3 (S1, inline): default `full`, code cache 64 MiB in every mode, option help text, README.
   Commit: pending.
 - T4 (S4, inline): `version.h` b2, CHANGELOG.md, NRO build. Commit: pending.
