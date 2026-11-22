@@ -39,6 +39,10 @@ Folders show no cover; a game with no cover shows a placeholder with the hint.
   b5, CHANGELOG, README, NRO build. DONE: CoverCache decodes at most one PNG per selection
   change (title id first, then file stem); build below.
 
+## Tasks (task 2 of the user's batch: eden-nx2 analysis)
+
+Handled outside this build: odd/analysis-eden-nx2.md.
+
 ## Log
 
 - L1 (user): "Te voy a encargar varias tareas para que avances solo." + S1 quote + repo
