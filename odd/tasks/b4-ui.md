@@ -15,6 +15,8 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
   file type and size, folders told apart from games, an empty-folder message, and the same
   controls as before (A open, B back, X options, Y game options, + exit).
 - S4: build `b4`, CHANGELOG.md, README.
+- S5: "Actualmente cuando cerras el juego se cierra el emulador ... Si podemos entender por que
+  pasa eso y volver directamente al menu del emulador, estamos del otro lado."
 
 ## Tasks
 
@@ -23,10 +25,17 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
 - T2 (S1, S2, inline): asset generator (`tools/switch2/ui/make_ui_assets.py`: Noto Sans
   glyph atlases, logo, 256x256 icon) and a platform-independent renderer
   (`ui_render.{h,cpp}`) checked by a host preview test that writes the screens as images.
-  Commit: pending.
+  DONE: assets generated (font atlases 25-98 KB, logo 16 KB, icon 12 KB, OFL.txt with Noto
+  Sans' copyright — Arch's noto-fonts LICENSE is an Apache text, the OFL body is taken from
+  noto-fonts-cjk); ui_render_test GREEN (ASan+TSan, guard bytes past the stride intact,
+  tiny canvas clipped); previews reviewed: help text re-wrapped and key/value rows laid out
+  in two columns after the first preview showed 80-column breaks.
 - T3 (S2, S3, inline): `platform.cpp` picker/options on a linear framebuffer, closed
   before Vulkan takes the window; icon wired into `nx_create_nro`. Commit: pending.
-- T4 (S4, inline): version b4, CHANGELOG, README, NRO build. Commit: pending.
+- T4 (S5, inline): after a clean game shutdown Avalon asks the homebrew loader to start it
+  again (envSetNextLoad), so the game list comes back in a fresh process; option "Return to
+  the game list" (default on) turns it off. Commit: pending.
+- T5 (S4, inline): version b4, CHANGELOG, README, NRO build. Commit: pending.
 
 ## Log
 
@@ -39,3 +48,12 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
   device needs no font library; the OFL text ships next to it.
 - L3 (decisions, mine): logo and icon are an original design (island emblem, "Avalon"
   wordmark); dark theme; behavior and settings files unchanged.
+- L4 (user): "Antes de compilar ... cuando cerras el juego se cierra el emulador, se cierra con
+  R + L. Si podemos entender por que pasa eso y volver directamente al menu del emulador".
+  Cause: main() runs picker -> one game -> clean shutdown -> return 0, which ends the NRO by
+  design; the in-game exit is + and - held (PumpEvents), no R + L binding exists in Avalon.
+  Load failures call ExitProcess() to HOME on purpose (emulation threads already started).
+- L5 (decision, user "dale"): relaunch through the loader (envSetNextLoad/envHasNextLoad, both
+  in libounce.a) instead of looping inside the process: a fresh process avoids re-reserving
+  the 4 GiB guest backing in a fragmented heap, Vulkan's hold on the window, and global
+  state that does not reset between sessions. Load-failure path unchanged.
