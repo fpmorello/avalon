@@ -58,3 +58,7 @@ builds again. Branch `feat/two-level-page-table` off `switch2-poc` in `fpmorello
   `base_ptr` had across `ResizeAndClear`).
 - L6 (prior fixes on switch2-poc): d65d14ea96 vulkan_device heapGetTotalSize declaration;
   8b9edfafda build.sh fails when ninja fails.
+
+- L7 (evidence, device): self-test run on the console: all 24 checks PASS, `RESULT PASS`
+  (A64 13, A32 11), logged as `Page table self-test: PASS`. Little Racer booted and ran at
+  100% emulation speed through the two-level lookup in `compact`. S1 and S2 proven on device.
