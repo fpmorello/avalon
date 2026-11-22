@@ -4,6 +4,21 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b7 — 2026-11-22 (`sw2-fork-b7`)
+
+Branch `feat/b7-nsz`. First item of the eden-nx2 adoption plan
+(`odd/analysis-eden-nx2.md`): solid NSZ/XCZ support, ported from
+`davidkalil10/eden-nx2` (same GPL lineage; files carried over and credited per commit).
+
+- **Solid NSZ/XCZ games load** (`core`): the container scan no longer rejects
+  solid-compressed `.nsz`; the decompressor decodes the single zstd stream into a bounded
+  cache (pinned head plus LRU, with a keep-tail window so multi-gigabyte seeks do not
+  thrash) instead of the whole body. Pre-decrypted NCZ sections skip the AES pass.
+- **Fewer open files on Switch 2** (`core`): cached VFS files are closed when their path is
+  recreated, moved or deleted, not only when the reference list overflows.
+- **Picker**: `.nsz` and `.xcz` files list as games.
+- The shared zero chunk stays in `.bss` (b6's const copy cost 2 MiB of NRO for nothing).
+
 ## b6 — 2026-11-22 (`sw2-fork-b6`)
 
 Branch `feat/b6-backlog-close`. Closes the review findings left open since b1-b3.

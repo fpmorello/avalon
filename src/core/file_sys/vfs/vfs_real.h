@@ -71,6 +71,7 @@ private:
                                   OpenMode perms = OpenMode::Read);
 
 private:
+    void CloseCachedFileLocked(const std::string& path);
     void EvictSingleReferenceLocked();
     void InsertReferenceIntoListLocked(FileReference& reference);
     void RemoveReferenceFromListLocked(FileReference& reference);

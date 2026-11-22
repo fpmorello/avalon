@@ -123,6 +123,7 @@ VirtualFile RealVfsFilesystem::CreateFile(std::string_view path_, OpenMode perms
     const auto path = FS::SanitizePath(path_, FS::DirectorySeparator::PlatformDefault);
     {
         std::scoped_lock lk{list_lock};
+        CloseCachedFileLocked(path);
         cache.erase(path);
     }
 
@@ -156,6 +157,8 @@ VirtualFile RealVfsFilesystem::MoveFile(std::string_view old_path_, std::string_
     const auto new_path = FS::SanitizePath(new_path_, FS::DirectorySeparator::PlatformDefault);
     {
         std::scoped_lock lk{list_lock};
+        CloseCachedFileLocked(old_path);
+        CloseCachedFileLocked(new_path);
         cache.erase(old_path);
         cache.erase(new_path);
     }
@@ -169,6 +172,7 @@ bool RealVfsFilesystem::DeleteFile(std::string_view path_) {
     const auto path = FS::SanitizePath(path_, FS::DirectorySeparator::PlatformDefault);
     {
         std::scoped_lock lk{list_lock};
+        CloseCachedFileLocked(path);
         cache.erase(path);
     }
     return FS::RemoveFile(path);
@@ -248,6 +252,24 @@ void RealVfsFilesystem::DropReference(std::unique_ptr<FileReference>&& reference
         reference->file.reset();
         num_open_files--;
     }
+}
+
+void RealVfsFilesystem::CloseCachedFileLocked(const std::string& path) {
+#ifdef __SWITCH2__
+    if (auto it = cache.find(path); it != cache.end()) {
+        if (auto base_file = it->second.lock()) {
+            auto* real_file = static_cast<RealVfsFile*>(base_file.get());
+            if (real_file->reference && real_file->reference->file) {
+                this->RemoveReferenceFromListLocked(*real_file->reference);
+                real_file->reference->file.reset();
+                num_open_files--;
+                this->InsertReferenceIntoListLocked(*real_file->reference);
+            }
+        }
+    }
+#else
+    (void)path;
+#endif
 }
 
 void RealVfsFilesystem::EvictSingleReferenceLocked() {
@@ -345,7 +367,13 @@ std::size_t RealVfsFile::Write(const u8* data, std::size_t length, std::size_t o
     if (!reference->file || !reference->file->Seek(static_cast<s64>(offset))) {
         return 0;
     }
+#ifdef __SWITCH2__
+    const auto written = reference->file->WriteSpan(std::span{data, length});
+    reference->file->Flush();
+    return written;
+#else
     return reference->file->WriteSpan(std::span{data, length});
+#endif
 }
 
 bool RealVfsFile::Rename(std::string_view name) {

@@ -156,25 +156,6 @@ static std::shared_ptr<NSP> OpenContainerAsNsp(const VirtualFile& file, Loader::
     return nullptr;
 }
 
-// Checks that every .ncz entry in the container is NCZBLOCK. Solid NCZ has no random access,
-// and the whole point of this build is to reject it at scan time so such files never appear
-// in the game list. Containers without any .ncz (plain NSP/XCI) pass through.
-static bool ContainerIsFullyBlockCompressed(const std::shared_ptr<NSP>& nsp) {
-    if (!nsp) {
-        return false;
-    }
-    for (const auto& entry : nsp->GetFiles()) {
-        const auto name = entry->GetName();
-        if (name.size() < 4 || name.substr(name.size() - 4) != ".ncz") {
-            continue;
-        }
-        if (!Core::Crypto::IsBlockCompressedNCZ(entry)) {
-            return false; // solid NCZ -> reject the whole container
-        }
-    }
-    return true; // no .ncz at all, or all block-compressed
-}
-
 template <typename Callback>
 bool ForEachContainerEntry(const std::shared_ptr<NSP>& nsp, bool only_content,
                            std::optional<u64> base_program_id, Callback&& on_entry) {
@@ -1301,12 +1282,6 @@ bool ManualContentProvider::AddEntriesFromContainer(VirtualFile file, bool only_
         return false;
     }
 
-    // Reject solid NCZ (.nsz without -B): only block-compressed NCZ is supported.
-    if (!ContainerIsFullyBlockCompressed(nsp)) {
-        LOG_DEBUG(Service_FS, "Skipping solid-compressed container: {}", file->GetName());
-        return false;
-    }
-
     return ForEachContainerEntry(
         nsp, only_content, base_program_id,
         [this](TitleType title_type, ContentRecordType content_type, u64 title_id,
@@ -1466,12 +1441,6 @@ void ExternalContentProvider::ScanDirectory(const VirtualDir& dir) {
 void ExternalContentProvider::ProcessNSP(const VirtualFile& file) {
     const auto nsp = OpenContainerAsNsp(file, Loader::FileType::NSP);
     if (!nsp) {
-        return;
-    }
-
-    // Reject solid NCZ (.nsz without -B): Eden only supports block-compressed NCZ.
-    if (!ContainerIsFullyBlockCompressed(nsp)) {
-        LOG_DEBUG(Service_FS, "Skipping solid-compressed container: {}", file->GetName());
         return;
     }
 

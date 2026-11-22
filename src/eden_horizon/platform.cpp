@@ -381,8 +381,9 @@ bool IsGameFile(const std::string& name) {
     for (char& c : extension) {
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
-    return extension == ".nsp" || extension == ".xci" || extension == ".nca" ||
-           extension == ".nro" || extension == ".nso";
+    return extension == ".nsp" || extension == ".xci" || extension == ".nsz" ||
+           extension == ".xcz" || extension == ".nca" || extension == ".nro" ||
+           extension == ".nso";
 }
 
 std::vector<Entry> ListFolder(const std::string& folder) {

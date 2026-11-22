@@ -4,11 +4,13 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <zstd.h>
@@ -294,16 +296,24 @@ private:
     u64 nca_size{};
 };
 
-// Solid NCZ: one zstd stream over the whole body. Decoded incrementally into memory, up to the
-// requested offset, so sequential install reads are O(n) instead of O(n^2).
+// Solid NCZ: one zstd stream over the whole body. Decoded incrementally into a bounded
+// 1 MiB chunk cache (256 MiB pinned head + 512 MiB LRU) while discarding intermediate
+// forward-seek chunks beyond a 16 MiB tail window so multi-GB jumps don't thrash the LRU.
 class SolidNczFile final : public FileSys::VfsFile {
 public:
+    static constexpr std::size_t PinnedBodyChunks = 256;
+    static constexpr std::size_t MaxLruChunks = 512;
+    static constexpr u64 SeekKeepTail = 16ULL * Chunk;
+
     SolidNczFile(std::string name_, FileSys::VirtualFile source_,
-                 std::vector<Section> sections_, u64 payload_start_)
+                 std::vector<Section> sections_, u64 payload_start_, bool pre_decrypted_)
         : name{std::move(name_)}, source{std::move(source_)}, sections{std::move(sections_)},
-          payload_start{payload_start_} {
-        const auto raw_header = source->ReadBytes(HeaderSize, 0);
-        data.assign(raw_header.begin(), raw_header.end());
+          payload_start{payload_start_}, pre_decrypted{pre_decrypted_},
+          raw_header(source->ReadBytes(HeaderSize, 0)) {
+        u64 size = HeaderSize;
+        for (const auto& s : sections)
+            size = std::max<u64>(size, static_cast<u64>(s.offset) + static_cast<u64>(s.size));
+        nca_size = size;
         frontier = HeaderSize;
     }
 
@@ -312,32 +322,164 @@ public:
     }
 
     std::string GetName() const override { return name; }
-    std::size_t GetSize() const override {
-        u64 size = HeaderSize;
-        for (const auto& s : sections)
-            size = std::max<u64>(size, static_cast<u64>(s.offset + s.size));
-        return static_cast<std::size_t>(size);
-    }
+    std::size_t GetSize() const override { return static_cast<std::size_t>(nca_size); }
     bool Resize(std::size_t) override { return false; }
     FileSys::VirtualDir GetContainingDirectory() const override { return nullptr; }
     bool IsWritable() const override { return false; }
     bool IsReadable() const override { return true; }
+    bool HasDecryptedSections() const override { return pre_decrypted; }
 
     std::size_t Read(u8* out, std::size_t len, std::size_t off) const override {
         std::scoped_lock lock{mutex};
-        const u64 nca_size = GetSize();
-        if (off >= nca_size) return 0;
+        if (off >= nca_size || raw_header.size() < HeaderSize) return 0;
         len = static_cast<std::size_t>(std::min<u64>(len, nca_size - off));
-        const u64 needed = off + len;
-        if (needed > frontier && !DecodeTo(needed)) return 0;
-        std::memcpy(out, data.data() + off, len);
-        return len;
+        u64 pos = off;
+        const u64 end = pos + len;
+        std::size_t out_off = 0;
+
+        if (pos < HeaderSize) {
+            const std::size_t hdr_take =
+                static_cast<std::size_t>(std::min<u64>(end, HeaderSize) - pos);
+            std::memcpy(out, raw_header.data() + pos, hdr_take);
+            pos += hdr_take;
+            out_off += hdr_take;
+        }
+
+        while (pos < end) {
+            const u64 body_off = pos - HeaderSize;
+            const u64 cid = body_off / Chunk;
+            const std::size_t in_chunk = static_cast<std::size_t>(body_off % Chunk);
+            const u64 chunk_end = std::min<u64>(nca_size, HeaderSize + (cid + 1) * Chunk);
+            const u64 piece_end = std::min<u64>(end, chunk_end);
+            const std::size_t take = static_cast<std::size_t>(piece_end - pos);
+
+            const CachedChunk* chunk = FindChunkLocked(cid);
+            if (chunk != nullptr && chunk->valid_bytes >= in_chunk + take) {
+                std::memcpy(out + out_off, chunk->data.data() + in_chunk, take);
+            } else {
+                if (pos < frontier) {
+                    ResetStreamLocked();
+                }
+                const u64 target = std::min<u64>(nca_size, std::max(piece_end, chunk_end));
+                if (frontier < target && !DecodeTo(target)) {
+                    return out_off;
+                }
+                chunk = FindChunkLocked(cid);
+                if (chunk == nullptr || chunk->valid_bytes < in_chunk + take) {
+                    return out_off;
+                }
+                std::memcpy(out + out_off, chunk->data.data() + in_chunk, take);
+            }
+
+            pos += take;
+            out_off += take;
+        }
+        return out_off;
     }
 
     std::size_t Write(const u8*, std::size_t, std::size_t) override { return 0; }
     bool Rename(std::string_view) override { return false; }
 
 private:
+    struct CachedChunk {
+        std::vector<u8> data;
+        std::size_t valid_bytes = 0;
+    };
+
+    std::size_t ChunkLengthLocked(u64 cid) const {
+        const u64 start = cid * Chunk;
+        const u64 body_total = nca_size - HeaderSize;
+        if (start >= body_total) return 0;
+        return static_cast<std::size_t>(std::min<u64>(Chunk, body_total - start));
+    }
+
+    const CachedChunk* FindChunkLocked(u64 cid) const {
+        if (cid < PinnedBodyChunks) {
+            return cid < pinned_chunks.size() && pinned_chunks[cid].valid_bytes > 0
+                       ? &pinned_chunks[cid]
+                       : nullptr;
+        }
+        const auto it = lru_map.find(cid);
+        if (it == lru_map.end()) return nullptr;
+        lru_list.splice(lru_list.begin(), lru_list, it->second);
+        return &it->second->second;
+    }
+
+    CachedChunk* ObtainWritableChunkLocked(u64 cid, std::size_t chunk_len,
+                                           bool allow_insert_lru) const {
+        if (cid < PinnedBodyChunks) {
+            if (pinned_chunks.size() <= cid) pinned_chunks.resize(cid + 1);
+            auto& entry = pinned_chunks[cid];
+            if (entry.data.size() != chunk_len) {
+                entry.data.assign(chunk_len, 0);
+                entry.valid_bytes = 0;
+            }
+            return &entry;
+        }
+        const auto it = lru_map.find(cid);
+        if (it != lru_map.end()) {
+            lru_list.splice(lru_list.begin(), lru_list, it->second);
+            auto& entry = it->second->second;
+            if (entry.data.size() != chunk_len) {
+                entry.data.assign(chunk_len, 0);
+                entry.valid_bytes = 0;
+            }
+            return &entry;
+        }
+        if (!allow_insert_lru) {
+            return nullptr;
+        }
+        CachedChunk entry;
+        if (lru_map.size() >= MaxLruChunks && !lru_list.empty()) {
+            entry.data = std::move(lru_list.back().second.data);
+            lru_map.erase(lru_list.back().first);
+            lru_list.pop_back();
+        }
+        entry.data.assign(chunk_len, 0);
+        entry.valid_bytes = 0;
+        lru_list.emplace_front(cid, std::move(entry));
+        lru_map.emplace(cid, lru_list.begin());
+        return &lru_list.front().second;
+    }
+
+    void StoreDecodedBytesLocked(u64 start_off, const u8* src, std::size_t len,
+                                 u64 keep_from) const {
+        std::size_t done = 0;
+        while (done < len) {
+            const u64 abs_off = start_off + done;
+            const u64 body_off = abs_off - HeaderSize;
+            const u64 cid = body_off / Chunk;
+            const std::size_t in_chunk = static_cast<std::size_t>(body_off % Chunk);
+            const std::size_t chunk_len = ChunkLengthLocked(cid);
+            if (chunk_len <= in_chunk) break;
+            const std::size_t take = std::min<std::size_t>(len - done, chunk_len - in_chunk);
+            const u64 chunk_end_off = HeaderSize + cid * Chunk + chunk_len;
+            const bool allow_insert_lru = chunk_end_off > keep_from;
+            if (auto* entry = ObtainWritableChunkLocked(cid, chunk_len, allow_insert_lru)) {
+                if (entry->valid_bytes < chunk_len) {
+                    if (src != nullptr) {
+                        std::memcpy(entry->data.data() + in_chunk, src + done, take);
+                    } else {
+                        std::memset(entry->data.data() + in_chunk, 0, take);
+                    }
+                    entry->valid_bytes = std::max(entry->valid_bytes, in_chunk + take);
+                }
+            }
+            done += take;
+        }
+    }
+
+    void ResetStreamLocked() const {
+        if (stream != nullptr) {
+            ZSTD_freeDStream(stream);
+            stream = nullptr;
+        }
+        read_pos = payload_start;
+        frontier = HeaderSize;
+        in_buf.clear();
+        in = ZSTD_inBuffer{nullptr, 0, 0};
+    }
+
     bool DecodeTo(u64 needed) const {
         if (stream == nullptr) {
             stream = ZSTD_createDStream();
@@ -347,6 +489,7 @@ private:
         }
 
         const u64 file_size = source->GetSize();
+        const u64 keep_from = (needed > HeaderSize + SeekKeepTail) ? (needed - SeekKeepTail) : HeaderSize;
         std::vector<u8> out_buf(Chunk);
 
         std::size_t index = 0;
@@ -364,10 +507,15 @@ private:
             const u64 end = std::max<u64>(static_cast<u64>(s.offset) + static_cast<u64>(s.size),
                                           begin);
             if (end <= frontier) continue;
+            if (frontier < begin) {
+                StoreDecodedBytesLocked(frontier, nullptr,
+                                        static_cast<std::size_t>(begin - frontier), keep_from);
+                frontier = begin;
+            }
             u64 pos = std::max<u64>(begin, frontier);
 
             std::optional<AESCipher<Key128>> cipher;
-            if (s.Ctr()) cipher.emplace(s.key, Mode::CTR);
+            if (!pre_decrypted && s.Ctr()) cipher.emplace(s.key, Mode::CTR);
 
             while (pos < end && frontier < needed) {
                 const u64 want = std::min<u64>(end - pos, out_buf.size());
@@ -393,6 +541,10 @@ private:
                         return false;
                     }
                     produced += outb.pos;
+                    if (res == 0 && outb.pos == 0 && in.pos >= in.size && read_pos >= file_size) {
+                        LOG_ERROR(Crypto, "Solid NCZ: unexpected EOF");
+                        return false;
+                    }
                 }
                 if (cipher) {
                     Key128 iv{};
@@ -400,7 +552,7 @@ private:
                     cipher->SetIV(iv);
                     cipher->Transcode(out_buf.data(), produced, out_buf.data(), Op::Encrypt);
                 }
-                data.insert(data.end(), out_buf.begin(), out_buf.begin() + produced);
+                StoreDecodedBytesLocked(pos, out_buf.data(), produced, keep_from);
                 pos += produced;
                 frontier = pos;
             }
@@ -412,8 +564,13 @@ private:
     const FileSys::VirtualFile source;
     const std::vector<Section> sections;
     const u64 payload_start;
+    const bool pre_decrypted;
+    const std::vector<u8> raw_header;
+    u64 nca_size{};
     mutable std::mutex mutex;
-    mutable std::vector<u8> data;
+    mutable std::vector<CachedChunk> pinned_chunks;
+    mutable std::list<std::pair<u64, CachedChunk>> lru_list;
+    mutable std::unordered_map<u64, std::list<std::pair<u64, CachedChunk>>::iterator> lru_map;
     mutable ZSTD_DStream* stream = nullptr;
     mutable u64 read_pos = 0;
     mutable u64 frontier = 0;
@@ -421,9 +578,9 @@ private:
     mutable ZSTD_inBuffer in{nullptr, 0, 0};
 };
 
-// Shared opener: block path always; solid only when allow_solid is true.
+// Shared opener: block path always; solid path with optional pre-decrypted bypass.
 FileSys::VirtualFile OpenNcz(const FileSys::VirtualFile& f, std::string_view name,
-                             bool allow_solid) {
+                             bool allow_solid, bool pre_decrypted) {
     if (!f) return nullptr;
     u64 ps = 0;
     auto parsed = ParseHeader(f, ps);
@@ -444,10 +601,11 @@ FileSys::VirtualFile OpenNcz(const FileSys::VirtualFile& f, std::string_view nam
     }
 
     if (allow_solid) {
-        return std::make_shared<SolidNczFile>(std::string{name}, f, std::move(sections), ps);
+        return std::make_shared<SolidNczFile>(std::string{name}, f, std::move(sections), ps,
+                                              pre_decrypted);
     }
 
-    LOG_DEBUG(Crypto, "Solid NCZ {} skipped (only NCZBLOCK is supported for play)", name);
+    LOG_DEBUG(Crypto, "Solid NCZ {} skipped", name);
     return nullptr;
 }
 
@@ -461,12 +619,12 @@ bool IsBlockCompressedNCZ(const FileSys::VirtualFile& f) {
 }
 
 FileSys::VirtualFile DecompressNCZ(const FileSys::VirtualFile& f, std::string_view name) {
-    return OpenNcz(f, name, /*allow_solid=*/false);
+    return OpenNcz(f, name, /*allow_solid=*/true, /*pre_decrypted=*/true);
 }
 
 FileSys::VirtualFile DecompressNCZForInstall(const FileSys::VirtualFile& f,
                                              std::string_view name) {
-    return OpenNcz(f, name, /*allow_solid=*/true);
+    return OpenNcz(f, name, /*allow_solid=*/true, /*pre_decrypted=*/false);
 }
 
 } // namespace Core::Crypto
