@@ -4,6 +4,24 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b4 — 2026-11-22 (`sw2-fork-b4`)
+
+Branch `feat/b4-ui`.
+
+- **Graphical menu** (`eden_horizon`): the game picker and the options screen are drawn in
+  software into a 1280x720 framebuffer — Avalon logo and build tag, readable game names
+  (no more `[TitleID][v0][Base].nsp`), NSP/XCI badges, sizes, folder icons, a scroll bar,
+  button hints and the selected option's help text in a side panel. The text console stays
+  as a fallback if the framebuffer cannot be opened. Fonts are Noto Sans (OFL-1.1),
+  rasterized at build time by `tools/switch2/ui/make_ui_assets.py`; the emblem, logo and
+  icon are original artwork. Host preview: `UI_PREVIEW_DIR=... tools/switch2/tests/run.sh
+  ui_render_test` writes each screen as an image.
+- **App icon** (`eden_horizon`): the NRO carries its own 256x256 icon in the homebrew menu.
+- **Back to the game list** (`eden_horizon`): leaving a game with + and - asks the loader
+  to start Avalon again (`envSetNextLoad`), so the game list returns in a fresh process;
+  option "Return to the game list" (on) turns it off. A close by the system does not
+  relaunch.
+
 ## b3 — 2026-11-22 (`sw2-fork-b3`)
 
 Branch `feat/b3-robustness-fps-diagnostics`.

@@ -40,7 +40,9 @@ end: an app icon and logo, and a graphical game picker and options menu drawn in
   + and -, so a system-side close does not relaunch; RequestRelaunch checks envHasNextLoad
   and passes argv[0]; `ninja eden-horizon` clean. Device check pending (does the kaiHEN
   loader honour envSetNextLoad?).
-- T5 (S4, inline): version b4, CHANGELOG, README, NRO build. Commit: pending.
+- T5 (S4, inline): version b4, CHANGELOG, README, NRO build. DONE: avalon-b4.nro built
+  (42839879 bytes, +223 KB over b3: embedded fonts, logo, icon). All host suites green;
+  the framebuffer path and the relaunch are device-only, both pending the user's run.
 
 ## Log
 

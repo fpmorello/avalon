@@ -49,17 +49,20 @@ Known limits:
   cache, but a full clear remains the last resort.
 - New guest code stutters while it is compiled. The CPU code cache removes most of it from
   the second session of a game on, at the cost of a longer start.
-- No touch screen, no network, one player, and no way back to the game list without
-  leaving the emulator.
+- No touch screen, no network, one player. Leaving a game restarts the app into the game
+  list ("Return to the game list", a fresh process); it does not go straight back while
+  the game's memory is still held.
 
 ## Using it
 
 1. Copy `avalon.nro` to `sdmc:/switch/`.
 2. Put your own `prod.keys` and `title.keys` in `sdmc:/switch/avalon/.local/share/avalon/keys/`.
-3. Start it from the homebrew menu and choose a game file. **X** opens the options for
-   every game, and **Y** the options of the game under the cursor, which start out
-   inheriting the general ones.
-4. Hold **+** and **−** together to leave the game.
+3. Start it from the homebrew menu. The game list shows each game's readable name, file
+   type and size; folders open with **A**. **X** opens the options for every game, and
+   **Y** the options of the game under the cursor, which start out inheriting the general
+   ones.
+4. Hold **+** and **−** together to leave the game. Avalon then starts again into the game
+   list, unless "Return to the game list" is off.
 
 The log is written to `sdmc:/switch/avalon/.local/share/avalon/log/avalon_log.txt`.
 
