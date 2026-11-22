@@ -4,6 +4,30 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b2 — 2026-11-21 (`sw2-fork-b2`)
+
+Branch `feat/b2-full-space-eviction-fixes`. First build that runs: b1 did not compile for
+the console, because its chunked page table left the JIT without the flat table it read.
+
+- **Avalon** (`eden_horizon`, `common`): the homebrew is named Avalon and keeps its data
+  under `sdmc:/switch/avalon/` (`.local/share/avalon/`, log `avalon_log.txt`), so it
+  installs next to stock Eden without sharing settings, keys or caches.
+- **Two-level page table lookup** (`dynarmic`, `core`): the arm64 JIT reads the guest
+  page table through the chunk directory (`page_table_level2_bits`), one extra load per
+  guest memory access. Unmapped ranges point to one shared all-zero chunk.
+- **Full address space by default** (`eden_horizon`, `core`): `Address space` defaults to
+  `full` now that the table costs only what the game maps; `compact` and `game` remain
+  as per-game options. The JIT code cache is 64 MiB per core in every mode.
+- **Eviction fixes** (`dynarmic`): a block invalidated and compiled again is no longer
+  evicted through its old queue entry, whose leftover bookkeeping is released instead; an
+  evicted block keeps its referrers, so it is linked directly again when recompiled; the
+  eviction count resets once the heap is no longer low.
+- **Page-table memory in the log**: `Memory detail` starts with `page tables N MiB`.
+- **On-device self-test**: an empty `sdmc:/switch/avalon/test_pagetable.txt` runs an A64
+  and A32 check of the lookup at start; result in `test_pagetable_result.txt`.
+- **Build fixes**: `heapGetTotalSize` declaration in `vulkan_device.cpp`; `build.sh`
+  fails when ninja fails and names the NRO `avalon-<build>.nro`.
+
 ## b1 — 2026-11-21 (`sw2-fork-b1`)
 
 First identified fork build. Branch `improve/sparse-page-table-jit-eviction`, base
