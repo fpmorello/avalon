@@ -4,6 +4,14 @@ Avalon builds are identified by a build id (`b<N>`) shown on the
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b14 — JIT under memory pressure
+
+- When the heap stays low, the JIT no longer drops and recompiles code on every check
+  after a drop that freed nothing. It drops code again once free heap has fallen a
+  further 64 MiB, and on every check below 256 MiB free. `Memory detail:` counts the
+  held checks. Targets the slowdown to 0.3 FPS seen in Minecraft Dungeons 2 on b13;
+  not yet verified on hardware.
+
 ## b13 — Per-game launch logs
 
 - Keep up to ten launch logs per game, including failed launches, under the Avalon log

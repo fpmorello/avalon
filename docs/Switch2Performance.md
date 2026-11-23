@@ -46,6 +46,17 @@ settings fixed and check speed, frame-time spikes, JIT activity and boot regress
 tuning, keep Dynarmic fixed and also inspect the raw `Memory detail:` lines for texture and
 buffer pressure. Do not promote a setting based on a single FPS reading.
 
+## Check JIT memory pressure (b14)
+
+The `Memory detail:` line reads `cache clears C (H for heap, E blocks evicted first,
+K low-heap checks held)`. All four are totals since launch. H and E rise when the JIT
+drops code because free heap is below 1536 MiB. From b14, K rises instead while a
+previous drop freed nothing and the heap has not fallen a further 64 MiB.
+
+Compare with the same scene on b13. Rising K with flat H and steady FPS means the JIT
+stopped recompiling for nothing. H climbing quickly while the `Stage:` memory figure
+keeps rising means the heap itself is running out, which the JIT cannot fix.
+
 ## A/B test asynchronous presentation (b12)
 
 Use `avalon-b12.nro` for both modes. In the picker, highlight the game, press **Y**,
