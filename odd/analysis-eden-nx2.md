@@ -63,12 +63,25 @@ Ranked by value to us; hashes are their commits.
    **ADOPTED in b7 (`feat/b7-nsz`)**: our files were byte-identical to their base, so the
    port is whole-file; plus their vfs_real cached-file close fix.
 2. **Updates & DLC** — their discovery + picker logic, adapted to our UI. May fix
-   Minecraft Dungeons 2 (ErrorNoExeFS needs the update NCA).
+   Minecraft Dungeons 2 (ErrorNoExeFS needs the update NCA). **Implemented in b8**;
+   booting with the selected update and DLC still needs device verification.
 3. **Return to launcher on load failure** — replace our `ExitProcess()`-to-HOME with
-   relaunch-to-picker, reusing our b4 relaunch path. Small, but changes the feel.
+   relaunch-to-picker, reusing our b4 relaunch path. **Implemented in b9**; the user
+   confirmed the missing-update message and menu return with Minecraft. **b10** adds
+   separate startup feedback and first-presentation diagnostics for black-screen cases.
 4. **Dynarmic timing/atomics** — benchmark v0.1.5's approach against our build before
-   adopting anything; our lookup changes overlap that code.
+   adopting anything; our lookup changes overlap that code. See the
+   [Switch 2 performance baseline](../docs/Switch2Performance.md).
 5. **GPU tuning flags** — evaluate async present / EDS3 against our VRAM budget work.
+
+## Additional Avalon backlog
+
+- **2–4 local players (pending)**: recognize separate physical controllers and assign
+  them to guest players 1–4 without duplicating input. Preserve one-player operation.
+  Acceptance on Switch 2: test 2, 3 and 4 controllers in a supported local multiplayer
+  game, verify independent input and reconnect behavior, and confirm player 1 still
+  drives the menu. Online multiplayer is out of scope. The inspected Eden-NX2 branch
+  offers controller profiles but forwards only one active pad; it is not a multiplayer port.
 
 Not adopted for now: auto-updater (security surface), telemetry, their launcher UI.
 
