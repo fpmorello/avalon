@@ -131,10 +131,15 @@ public:
 
     /// Waits for the given GPU tick, optionally pacing frames.
     void Wait(u64 tick, double target_fps = 0.0) {
+        if (tick > 0 && tick >= master_semaphore->CurrentTick()) {
+            Flush();
+        }
+        WaitSubmitted(tick, target_fps);
+    }
+
+    // Presentation workers may wait on a submitted tick, but cannot flush render state.
+    void WaitSubmitted(u64 tick, double target_fps = 0.0) {
         if (tick > 0) {
-            if (tick >= master_semaphore->CurrentTick()) {
-                Flush();
-            }
             master_semaphore->Wait(tick);
         }
         if (Settings::values.use_speed_limit.GetValue() && target_fps > 0.0) {

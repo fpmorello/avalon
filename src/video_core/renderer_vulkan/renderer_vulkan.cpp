@@ -208,6 +208,7 @@ try
 }
 
 RendererVulkan::~RendererVulkan() {
+    present_manager.StopPresentThread();
     scheduler.RegisterOnSubmit([] {});
     void(device.GetLogical().WaitIdle());
 }
@@ -225,17 +226,20 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
 
     RenderScreenshot(framebuffers);
     Frame* frame = present_manager.GetRenderFrame();
+#ifdef __SWITCH2__
+    frame->guest_composite = !framebuffers.empty();
+#endif
 
     scheduler.RequestOutsideRenderPassOperationContext();
+    const auto surface_state = present_manager.GetSurfaceState();
     blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
-                               render_window.GetFramebufferLayout(),
-                               present_manager.SwapchainImageCount(),
-                               swapchain.GetImageViewFormat());
+                               render_window.GetFramebufferLayout(), surface_state.count,
+                               surface_state.view_format, surface_state.format);
 
 #ifdef HAS_LSFG
     void(frame_gen.WantedGenerations(present_manager.MaxExtraFrames()));
 
-    frame_gen.Process(device, frame, present_manager.SwapchainImageFormat(),
+    frame_gen.Process(device, frame, surface_state.format,
                       GuestExtent(framebuffers));
 
     const size_t generated_frames = frame_gen.GeneratedFrameCount();
@@ -248,7 +252,12 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     }
 #endif
 
-    scheduler.Flush(*frame->render_ready);
+    const auto render_tick = scheduler.Flush(*frame->render_ready);
+#ifdef __SWITCH2__
+    frame->render_tick = render_tick;
+#else
+    (void)render_tick;
+#endif
 
     present_manager.Present(frame);
 #ifdef HAS_LSFG
@@ -258,6 +267,26 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     gpu.RendererFrameEndNotify();
     rasterizer.TickFrame();
 }
+
+#ifdef __SWITCH2__
+bool RendererVulkan::PresentStartupFrame() {
+    Frame* frame = present_manager.GetRenderFrame();
+    frame->startup = true;
+    scheduler.RequestOutsideRenderPassOperationContext();
+    const auto surface_state = present_manager.GetSurfaceState();
+    blit_swapchain.DrawToFrame(device, rasterizer, frame, {}, render_window.GetFramebufferLayout(),
+                               surface_state.count, surface_state.view_format, surface_state.format);
+    // Complete the draw before the next card can rewrite the overlay's descriptor set.
+    frame->render_tick = scheduler.CurrentTick();
+    scheduler.Finish(*frame->render_ready);
+    present_manager.Present(frame);
+    // Dispatch the async enqueue, then wait for the swapchain operation to finish.
+    scheduler.WaitWorker();
+    present_manager.WaitPresent();
+    // No guest render thread is running, so this slot cannot be reused before the read.
+    return frame->present_accepted;
+}
+#endif
 
 void RendererVulkan::Report() const {
     using namespace Common::Literals;

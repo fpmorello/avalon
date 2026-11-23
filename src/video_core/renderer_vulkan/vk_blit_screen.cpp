@@ -33,8 +33,8 @@ BlitScreen::BlitScreen(Tegra::MaxwellDeviceMemoryManager& device_memory_, const 
 BlitScreen::~BlitScreen() = default;
 
 void BlitScreen::WaitIdle(const Device& device) {
-    present_manager.WaitPresent();
     scheduler.Finish();
+    present_manager.WaitPresent();
     device.GetLogical().WaitIdle();
 }
 
@@ -92,21 +92,22 @@ void BlitScreen::PrepareFrame(const Device& device, Frame* frame,
         return;
     }
 
-    if (frame->width != layout.width || frame->height != layout.height) {
+    if (frame->width != layout.width || frame->height != layout.height ||
+        frame->image_format != image_format || frame->image_view_format != swapchain_view_format) {
         WaitIdle(device);
     } else if (!present_manager.NeedsStorage(frame, true)) {
         return;
     }
 
     present_manager.RecreateFrame(frame, layout.width, layout.height, swapchain_view_format,
-                                  window_adapt->GetRenderPass(), true);
+                                  window_adapt->GetRenderPass(), true, image_format);
 }
 
 void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer, Frame* frame,
                              std::span<const Tegra::FramebufferConfig> framebuffers,
                              const Layout::FramebufferLayout& layout,
                              size_t current_swapchain_image_count,
-                             VkFormat current_swapchain_view_format) {
+                             VkFormat current_swapchain_view_format, VkFormat current_image_format) {
     bool resource_update_required = false;
     bool presentation_recreate_required = false;
 
@@ -120,10 +121,14 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
     }
 
     if (swapchain_view_format != current_swapchain_view_format ||
-        layout.width != frame->width || layout.height != frame->height) {
+        layout.width != frame->width || layout.height != frame->height ||
+        (current_image_format != VK_FORMAT_UNDEFINED &&
+         (frame->image_format != current_image_format ||
+          frame->image_view_format != current_swapchain_view_format))) {
         resource_update_required = true;
         presentation_recreate_required = true;
         swapchain_view_format = current_swapchain_view_format;
+        image_format = current_image_format;
     }
 
     const bool storage_required = Settings::values.frame_gen.GetValue();
@@ -133,13 +138,13 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
 
         if (presentation_recreate_required) {
             present_manager.RecreateFrame(frame, layout.width, layout.height, swapchain_view_format,
-                                          window_adapt->GetRenderPass(), storage_required);
+                                          window_adapt->GetRenderPass(), storage_required, image_format);
         }
 
         image_index = 0;
     } else if (present_manager.NeedsStorage(frame, storage_required)) {
         present_manager.RecreateFrame(frame, layout.width, layout.height, swapchain_view_format,
-                                      window_adapt->GetRenderPass(), true);
+                                      window_adapt->GetRenderPass(), true, image_format);
     }
 
     const VkExtent2D window_size{

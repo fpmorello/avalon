@@ -49,6 +49,10 @@ public:
 
     void Composite(std::span<const Tegra::FramebufferConfig> framebuffers) override;
 
+#ifdef __SWITCH2__
+    bool PresentStartupFrame() override;
+#endif
+
     std::vector<u8> GetAppletCaptureBuffer() override;
 
     VideoCore::RasterizerInterface* ReadRasterizer() override {

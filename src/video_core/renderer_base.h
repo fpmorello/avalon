@@ -41,6 +41,11 @@ public:
     /// Finalize rendering the guest frame and draw into the presentation texture
     virtual void Composite(std::span<const Tegra::FramebufferConfig> layers) = 0;
 
+#ifdef __SWITCH2__
+    /// Submit a host-only startup overlay before the guest GPU thread starts.
+    virtual bool PresentStartupFrame() { return false; }
+#endif
+
     /// Get the tiled applet layer capture buffer
     virtual std::vector<u8> GetAppletCaptureBuffer() = 0;
 

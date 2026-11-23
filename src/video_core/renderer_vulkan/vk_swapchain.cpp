@@ -158,50 +158,71 @@ void Swapchain::Create(
     resource_ticks.resize(image_count);
 }
 
-bool Swapchain::AcquireNextImage() {
+Swapchain::Acquisition Swapchain::AcquireNextImage(bool startup, u64 async_render_tick) {
+    constexpr u64 async_acquire_timeout_ns = 100'000'000;
     const VkResult result = device.GetLogical().AcquireNextImageKHR(
-        *swapchain, (std::numeric_limits<u64>::max)(), *present_semaphores[frame_index],
+        *swapchain, async_render_tick ? async_acquire_timeout_ns : (std::numeric_limits<u64>::max)(),
+        *present_semaphores[frame_index],
         VK_NULL_HANDLE, &image_index);
     switch (result) {
     case VK_SUCCESS:
         break;
     case VK_SUBOPTIMAL_KHR:
         is_suboptimal = true;
+        if (!async_render_tick) {
+            return Acquisition::Suboptimal;
+        }
         break;
     case VK_ERROR_OUT_OF_DATE_KHR:
         is_outdated = true;
-        break;
+        return Acquisition::Recreate;
+    case VK_TIMEOUT:
+    case VK_NOT_READY:
+        return Acquisition::Unavailable;
     case VK_ERROR_SURFACE_LOST_KHR:
         vk::Check(result);
         break;
     default:
         LOG_ERROR(Render_Vulkan, "vkAcquireNextImageKHR returned {}", string_VkResult(result));
+        if (startup) {
+            is_outdated = true;
+            return Acquisition::Recreate;
+        }
+        vk::Check(result);
         break;
     }
 
-    const auto wait_with_frame_pacing = [this] {
+    const auto wait = [this, async_render_tick](double fps = 0.0) {
+        const auto tick = resource_ticks[image_index];
+        if (async_render_tick) {
+            scheduler.WaitSubmitted(tick, fps);
+        } else {
+            scheduler.Wait(tick, fps);
+        }
+    };
+    const auto wait_with_frame_pacing = [&] {
     switch (Settings::values.frame_pacing_mode.GetValue()) {
     case Settings::FramePacingMode::Target_Auto:
-        scheduler.Wait(resource_ticks[image_index]);
+        wait();
         break;
     case Settings::FramePacingMode::Target_30:
-        scheduler.Wait(resource_ticks[image_index], 30.0);
+        wait(30.0);
         break;
     case Settings::FramePacingMode::Target_60:
-        scheduler.Wait(resource_ticks[image_index], 60.0);
+        wait(60.0);
         break;
     case Settings::FramePacingMode::Target_90:
-        scheduler.Wait(resource_ticks[image_index], 90.0);
+        wait(90.0);
         break;
     case Settings::FramePacingMode::Target_120:
-        scheduler.Wait(resource_ticks[image_index], 120.0);
+        wait(120.0);
         break;
     }
     };
 
 #ifdef __ANDROID__
     if (android_get_device_api_level() >= 30) {
-        scheduler.Wait(resource_ticks[image_index]);
+        wait();
     } else {
         wait_with_frame_pacing();
     }
@@ -209,12 +230,12 @@ bool Swapchain::AcquireNextImage() {
     wait_with_frame_pacing();
 #endif
 
-    resource_ticks[image_index] = scheduler.CurrentTick();
+    resource_ticks[image_index] = async_render_tick ? async_render_tick : scheduler.CurrentTick();
 
-    return is_suboptimal || is_outdated;
+    return Acquisition::Ready;
 }
 
-void Swapchain::Present(VkSemaphore render_semaphore) {
+bool Swapchain::Present(VkSemaphore render_semaphore, bool startup) {
     const auto present_queue{device.GetPresentQueue()};
     const VkPresentInfoKHR present_info{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -227,7 +248,8 @@ void Swapchain::Present(VkSemaphore render_semaphore) {
         .pResults = nullptr,
     };
     std::scoped_lock lock{scheduler.submit_mutex};
-    switch (const VkResult result = present_queue.Present(present_info)) {
+    const VkResult result = present_queue.Present(present_info);
+    switch (result) {
     case VK_SUCCESS:
         break;
     case VK_SUBOPTIMAL_KHR:
@@ -237,7 +259,16 @@ void Swapchain::Present(VkSemaphore render_semaphore) {
         is_outdated = true;
         break;
     case VK_ERROR_SURFACE_LOST_KHR:
-        vk::Check(result);
+#ifdef __SWITCH2__
+        // The submitted copy owns the frame fence and has consumed render_ready.
+        // Recover on the next frame; this frame must not reenter the acquisition loop.
+        is_outdated = true;
+#else
+        if (!startup) {
+            vk::Check(result);
+        }
+        is_outdated = true;
+#endif
         break;
     default:
         LOG_CRITICAL(Render_Vulkan, "Failed to present with error {}", string_VkResult(result));
@@ -247,6 +278,7 @@ void Swapchain::Present(VkSemaphore render_semaphore) {
     if (frame_index >= image_count) {
         frame_index = 0;
     }
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
 void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {

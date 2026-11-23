@@ -58,7 +58,8 @@ public:
     void DrawToFrame(const Device& device, RasterizerVulkan& rasterizer, Frame* frame,
                      std::span<const Tegra::FramebufferConfig> framebuffers,
                      const Layout::FramebufferLayout& layout, size_t current_swapchain_image_count,
-                     VkFormat current_swapchain_view_format);
+                     VkFormat current_swapchain_view_format,
+                     VkFormat current_image_format = VK_FORMAT_UNDEFINED);
 
     void PrepareFrame(const Device& device, Frame* frame, const Layout::FramebufferLayout& layout);
 
@@ -86,6 +87,7 @@ private:
     std::size_t image_count{};
     std::size_t image_index{};
     VkFormat swapchain_view_format{};
+    VkFormat image_format{};
 
     Settings::ScalingFilter scaling_filter{};
     std::unique_ptr<WindowAdaptPass> window_adapt{};

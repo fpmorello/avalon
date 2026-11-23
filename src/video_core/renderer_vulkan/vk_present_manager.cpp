@@ -167,7 +167,19 @@ PresentManager::PresentManager(const vk::Instance& instance_,
     }
 }
 
-PresentManager::~PresentManager() = default;
+PresentManager::~PresentManager() {
+    StopPresentThread();
+}
+
+void PresentManager::StopPresentThread() {
+    if (!present_thread.joinable()) {
+        return;
+    }
+    scheduler.WaitWorker();
+    WaitPresent();
+    present_thread.request_stop();
+    present_thread.join();
+}
 
 Frame* PresentManager::GetRenderFrame() {
 
@@ -178,10 +190,16 @@ Frame* PresentManager::GetRenderFrame() {
     // Take the frame from the queue
     Frame* frame = free_queue.front();
     free_queue.pop_front();
+    lock.unlock();
 
     // Wait for the presentation to be finished so all frame resources are free
     frame->present_done.Wait();
     frame->present_done.Reset();
+#ifdef __SWITCH2__
+    frame->guest_composite = false;
+    frame->startup = false;
+    frame->present_accepted = false;
+#endif
 
     return frame;
 }
@@ -193,6 +211,8 @@ void PresentManager::Present(Frame* frame) {
             present_queue.push_back(frame);
             frame_cv.notify_one();
         });
+        // Dispatch before the producer can wait for another free frame.
+        scheduler.DispatchWork();
     } else {
         scheduler.WaitWorker();
         CopyToSwapchain(frame);
@@ -209,11 +229,13 @@ bool PresentManager::NeedsStorage(const Frame* frame, bool required) const {
 }
 
 void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat image_view_format,
-                                   VkRenderPass rd, bool storage) {
+                                   VkRenderPass rd, bool storage, VkFormat image_format) {
     auto& dld = device.GetLogical();
 
     frame->width = width;
     frame->height = height;
+    frame->image_format = image_format == VK_FORMAT_UNDEFINED ? GetSurfaceState().format : image_format;
+    frame->image_view_format = image_view_format;
 
     const bool with_storage = storage && frame->storage_capable;
     VkImageUsageFlags storage_usage = 0;
@@ -226,7 +248,7 @@ void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat
         .pNext = nullptr,
         .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = swapchain.GetImageFormat(),
+        .format = frame->image_format,
         .extent =
             {
                 .width = width,
@@ -277,7 +299,7 @@ void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat
             .flags = 0,
             .image = *frame->image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = swapchain.GetImageFormat(),
+            .format = frame->image_format,
             .components =
                 {
                     .r = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -356,8 +378,18 @@ void PresentManager::PresentThread(std::stop_token token) {
 }
 
 void PresentManager::RecreateSwapchain(Frame* frame) {
-    swapchain.Create(*surface, frame->width, frame->height); // Pass raw pointer
+#ifdef __SWITCH2__
+    // A rejected present can leave its copy in flight in either presentation mode.
+    std::scoped_lock lock{scheduler.submit_mutex};
+    vk::Check(device.GetLogical().WaitIdle());
+#endif
+    swapchain.Create(*surface, frame->width, frame->height);
     SetImageCount();
+}
+
+PresentManager::SurfaceState PresentManager::GetSurfaceState() const {
+    std::scoped_lock lock{surface_state_mutex};
+    return surface_state;
 }
 
 void PresentManager::SetImageCount() {
@@ -373,8 +405,9 @@ void PresentManager::SetImageCount() {
 #else
     image_count = std::min<size_t>(swapchain.GetImageCount(), MAX_FRAMES_IN_FLIGHT);
 #endif
-    swapchain_image_count = swapchain.GetImageCount();
-    swapchain_image_format = swapchain.GetImageFormat();
+    std::scoped_lock lock{surface_state_mutex};
+    surface_state = {swapchain.GetImageCount(), swapchain.GetImageFormat(),
+                     swapchain.GetImageViewFormat()};
 }
 
 void PresentManager::DiscardFrame(Frame* frame) {
@@ -394,6 +427,22 @@ void PresentManager::DiscardFrame(Frame* frame) {
 
     std::scoped_lock submit_lock{scheduler.submit_mutex};
     void(device.GetGraphicsQueue().Submit(submit_info, *frame->present_done));
+}
+
+void PresentManager::RetireAcquisition() {
+    // SUBOPTIMAL still acquires an image and signals the semaphore. Consume that signal
+    // before replacing the old swapchain, without consuming the guest's render signal.
+    const auto semaphore = swapchain.CurrentPresentSemaphore();
+    constexpr VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    const VkSubmitInfo submit_info{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &semaphore,
+        .pWaitDstStageMask = &stage,
+    };
+    std::scoped_lock lock{scheduler.submit_mutex};
+    vk::Check(device.GetGraphicsQueue().Submit(submit_info, VK_NULL_HANDLE));
+    vk::Check(device.GetLogical().WaitIdle());
 }
 
 void PresentManager::CopyToSwapchain(Frame* frame) {
@@ -434,7 +483,33 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
         RecreateSwapchain(frame);
     }
 
-    while (swapchain.AcquireNextImage()) {
+#ifdef __SWITCH2__
+    const bool startup = frame->startup;
+#else
+    constexpr bool startup = false;
+#endif
+#ifdef __SWITCH2__
+    const u64 async_tick = use_present_thread ? frame->render_tick : 0;
+#else
+    constexpr u64 async_tick = 0;
+#endif
+    for (unsigned attempt = 0;; ++attempt) {
+        if (async_tick && frame->image_format != swapchain.GetImageFormat()) {
+            DiscardFrame(frame);
+            return;
+        }
+        const auto result = swapchain.AcquireNextImage(startup, async_tick);
+        if (result == Swapchain::Acquisition::Ready) {
+            break;
+        }
+        if (result == Swapchain::Acquisition::Suboptimal) {
+            RetireAcquisition();
+        }
+        if (result == Swapchain::Acquisition::Unavailable ||
+            ((startup || async_tick) && attempt == 1)) {
+            DiscardFrame(frame);
+            return;
+        }
         RecreateSwapchain(frame);
     }
 
@@ -582,7 +657,14 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
     }
 
     // Present
-    swapchain.Present(render_semaphore);
+    [[maybe_unused]] const bool accepted = swapchain.Present(render_semaphore, startup);
+#ifdef __SWITCH2__
+    frame->present_accepted = accepted;
+    if (accepted && frame->guest_composite && !first_guest_present_notified) {
+        first_guest_present_notified = true;
+        render_window.OnGuestFramePresented();
+    }
+#endif
 }
 
 } // namespace Vulkan

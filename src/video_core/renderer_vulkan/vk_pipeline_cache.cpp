@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstddef>
 #include <fstream>
 #include <iostream>
@@ -637,6 +638,9 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         size_t total{};
         size_t built{};
         bool has_loaded{};
+#ifdef __SWITCH2__
+        std::condition_variable progress;
+#endif
         std::unique_ptr<PipelineStatistics> statistics;
     } state;
 
@@ -647,7 +651,11 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         ComputePipelineCacheKey key;
         file.read(reinterpret_cast<char*>(&key), sizeof(key));
 
-        workers.QueueWork([this, key, env_ = std::move(env), &state, &callback]() mutable {
+        workers.QueueWork([this, key, env_ = std::move(env), &state
+#ifndef __SWITCH2__
+                           , &callback
+#endif
+                           ]() mutable {
             ShaderPools pools;
             auto pipeline{CreateComputePipeline(pools, key, env_, state.statistics.get(), false)};
             std::scoped_lock lock{state.mutex};
@@ -656,7 +664,13 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             }
             ++state.built;
             if (state.has_loaded) {
+#ifdef __SWITCH2__
+                if (state.built == state.total) {
+                    state.progress.notify_one();
+                }
+#else
                 callback(VideoCore::LoadCallbackStage::Build, state.built, state.total);
+#endif
             }
         });
         ++state.total;
@@ -693,7 +707,11 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             return;
         }
 
-        workers.QueueWork([this, key, envs_ = std::move(envs), &state, &callback]() mutable {
+        workers.QueueWork([this, key, envs_ = std::move(envs), &state
+#ifndef __SWITCH2__
+                           , &callback
+#endif
+                           ]() mutable {
             ShaderPools pools;
             boost::container::static_vector<Shader::Environment*, 5> env_ptrs;
             for (auto& env : envs_) {
@@ -708,7 +726,13 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             }
             ++state.built;
             if (state.has_loaded) {
+#ifdef __SWITCH2__
+                if (state.built == state.total) {
+                    state.progress.notify_one();
+                }
+#else
                 callback(VideoCore::LoadCallbackStage::Build, state.built, state.total);
+#endif
             }
         });
         ++state.total;
@@ -718,11 +742,34 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
 
     LOG_INFO(Render_Vulkan, "Total Pipeline Count: {}", state.total);
 
+#ifdef __SWITCH2__
+    // The boot overlay is submitted by the caller, never by compiler workers.
+    // Run it outside state.mutex, and drain workers before unwinding if it throws.
+    try {
+        std::unique_lock lock{state.mutex};
+        state.has_loaded = true;
+        for (;;) {
+            const auto built = state.built;
+            const auto total = state.total;
+            lock.unlock();
+            callback(VideoCore::LoadCallbackStage::Build, built, total);
+            if (built >= total || stop_loading.stop_requested()) {
+                break;
+            }
+            lock.lock();
+            state.progress.wait_for(lock, std::chrono::milliseconds{125},
+                                    [&] { return state.built >= total; });
+        }
+    } catch (...) {
+        workers.WaitForRequests();
+        throw;
+    }
+#else
     std::unique_lock lock{state.mutex};
     callback(VideoCore::LoadCallbackStage::Build, 0, state.total);
     state.has_loaded = true;
     lock.unlock();
-
+#endif
     workers.WaitForRequests(stop_loading);
 
     if (use_vulkan_pipeline_cache) {

@@ -36,15 +36,17 @@ public:
         u32 width,
         u32 height);
 
-    /// Acquires the next image in the swapchain, waits as needed.
-    bool AcquireNextImage();
+    enum class Acquisition { Ready, Suboptimal, Recreate, Unavailable };
+
+    /// An async render tick identifies work already submitted for this frame.
+    Acquisition AcquireNextImage(bool startup = false, u64 async_render_tick = 0);
 
     /// Presents the rendered image to the swapchain.
-    void Present(VkSemaphore render_semaphore);
+    bool Present(VkSemaphore render_semaphore, bool startup = false);
 
     /// Returns true when the swapchain needs to be recreated.
     bool NeedsRecreation() const {
-        return IsSubOptimal() || NeedsPresentModeUpdate();
+        return IsOutDated() || IsSubOptimal() || NeedsPresentModeUpdate();
     }
 
     /// Returns true when the swapchain is outdated.

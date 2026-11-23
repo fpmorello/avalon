@@ -77,6 +77,11 @@ public:
     /// Called from GPU thread when a frame is displayed.
     virtual void OnFrameDisplayed() {}
 
+#ifdef __SWITCH2__
+    /// First guest composite accepted by the Vulkan presentation queue, not physical scanout.
+    virtual void OnGuestFramePresented() {}
+#endif
+
     /**
      * Returns a GraphicsContext that the frontend provides to be used for rendering.
      */
