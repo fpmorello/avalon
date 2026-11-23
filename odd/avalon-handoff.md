@@ -1,9 +1,9 @@
 # Avalon Switch 2 handoff — b13
 
-## Local state
+## Repository state
 
-- Branch: `feat/b7-nsz`; checked-out commit at handoff: `8f50ddebc7` (`sw2-fork-b7`). The b8–b13 source, tests and docs are local changes, not staged or pushed.
-- Run `git status --short --branch` and review the tracked diff and new source/test/docs files. Do not bulk-stage: `.codegraph/`, `.pi/`, `build/` (includes local backups), ignored NROs, and any console logs or saves are not part of the source delivery. Follow `AGENTS.md` for human-owned commit messages and publishing.
+- Repository: https://github.com/fpmorello/avalon (renamed from `eden-switch2-poc`). `main` is the only branch and the default; b13 source is tagged `sw2-fork-b13`. b8–b12 have no separate tags because they were committed together.
+- Do not commit `.codegraph/`, `.pi/`, `build/` (includes local backups), NROs, console logs or saves. Follow `AGENTS.md`: publishing needs the maintainer's explicit request.
 - Final local `avalon-b13.nro`: 42,905,415 bytes, SHA-256 `ecbe710269a59dae6be652ff6c06ee3f720633b6de83c2940cab6f54f8064a19`. Job 24 passed the Switch 2 build, comparison against build output, NRO magic/version checks, and b8–b12 hash comparison. Focused host retention/cap test, eight Python tests and independent log-fallback verification passed. Real SD retention is still unverified.
 - Build: `DEVKITPRO=/opt/devkitpro sh tools/switch2/build.sh -j 6 eden-horizon_nro`. The script copies the result to the versioned local NRO. Preserve prior NROs and user saves; no agent writes to SD or NAND.
 
