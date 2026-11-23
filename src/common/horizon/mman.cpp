@@ -102,6 +102,7 @@ unsigned long long eden_horizon_jit_blocks = 0;
 unsigned long long eden_horizon_jit_cache_clears = 0;
 unsigned long long eden_horizon_jit_heap_clears = 0;
 unsigned long long eden_horizon_jit_partial_evictions = 0;
+unsigned long long eden_horizon_jit_heap_holds = 0;
 unsigned long long eden_horizon_jit_mem_fallbacks = 0;
 unsigned long long eden_horizon_jit_compile_micros = 0;
 int eden_horizon_compact_address_space = 0;

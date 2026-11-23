@@ -233,9 +233,10 @@ struct CompileTimer {
     }
 };
 
+constexpr std::uint64_t MinFreeHeap = 1536ULL * 1024 * 1024;
+
 bool HeapIsRunningLow() {
-    constexpr std::uint64_t MinFree = 1536ULL * 1024 * 1024;
-    return heapGetFreeSize() < MinFree;
+    return heapGetFreeSize() < MinFreeHeap;
 }
 
 void CollectLeaf(const IR::Term::LeafTerminal& leaf, std::vector<IR::LocationDescriptor>& out) {
@@ -279,18 +280,25 @@ CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     // Checked here and not in Emit(), which the loop below calls with a block it must keep.
     constexpr std::size_t MinBlocksToDrop = 16384;
     if ((++emits_since_heap_check & 0x3FF) == 0) {
-        if (!HeapIsRunningLow()) {
+        const std::uint64_t free_heap = heapGetFreeSize();
+        if (free_heap >= MinFreeHeap) {
             // The pressure is gone: later evictions start counting from zero again, so
             // the full clear stays the answer to evictions that did not help.
             evictions_since_clear = 0;
+            heap_relief.Reset();
         } else if (block_infos.size() >= MinBlocksToDrop) {
-            // Throwing the whole cache away recompiles everything the game runs next; drop
-            // the oldest quarter first and keep the full clear as the fallback.
-            constexpr unsigned MaxEvictionsBeforeClear = 2;
-            if (evictions_since_clear >= MaxEvictionsBeforeClear ||
-                EvictOldestBlocks(EvictBlockCount(block_infos.size())) == 0) {
-                __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
-                ClearCache();
+            if (heap_relief.ShouldRelieve(free_heap)) {
+                // Throwing the whole cache away recompiles everything the game runs next;
+                // drop the oldest quarter first and keep the full clear as the fallback.
+                constexpr unsigned MaxEvictionsBeforeClear = 2;
+                if (evictions_since_clear >= MaxEvictionsBeforeClear ||
+                    EvictOldestBlocks(EvictBlockCount(block_infos.size())) == 0) {
+                    __atomic_fetch_add(&eden_horizon_jit_heap_clears, 1, __ATOMIC_RELAXED);
+                    ClearCache();
+                }
+                heap_relief.Relieved(heapGetFreeSize());
+            } else {
+                __atomic_fetch_add(&eden_horizon_jit_heap_holds, 1, __ATOMIC_RELAXED);
             }
         }
     }

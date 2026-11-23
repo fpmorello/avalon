@@ -11,12 +11,14 @@
 
 #include "dynarmic/backend/arm64/jit_eviction.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 using Dynarmic::Backend::Arm64::EvictBlockCount;
+using Dynarmic::Backend::Arm64::HeapReliefBackoff;
 using Dynarmic::Backend::Arm64::IsLiveEmission;
 using Dynarmic::Backend::Arm64::PruneDeadReferrers;
 
@@ -79,11 +81,79 @@ void TestPruneDeadReferrers() {
     CHECK((all_alive == std::vector<int>{7}));
 }
 
+constexpr std::uint64_t MiB = 1024 * 1024;
+
+void TestHeapReliefFirstCheck() {
+    // The first check that finds the heap low always relieves it.
+    HeapReliefBackoff backoff;
+    CHECK(backoff.ShouldRelieve(1400 * MiB));
+    HeapReliefBackoff empty;
+    CHECK(empty.ShouldRelieve(0));
+}
+
+void TestHeapReliefHeldUntilFurtherFall() {
+    // b13 Minecraft Dungeons 2: free heap stayed about 1435-1475 MiB while the JIT
+    // cleared its cache 119 times for heap. A relief that freed nothing is not repeated
+    // while the heap stays where it was.
+    HeapReliefBackoff backoff;
+    CHECK(backoff.ShouldRelieve(1475 * MiB));
+    backoff.Relieved(1475 * MiB);
+    CHECK(!backoff.ShouldRelieve(1475 * MiB));
+    CHECK(!backoff.ShouldRelieve(1435 * MiB));
+    CHECK(!backoff.ShouldRelieve(1475 * MiB - (64 * MiB - 1)));
+
+    // It is repeated once the heap has fallen a further 64 MiB.
+    CHECK(backoff.ShouldRelieve(1475 * MiB - 64 * MiB));
+    backoff.Relieved(1411 * MiB);
+    CHECK(!backoff.ShouldRelieve(1400 * MiB));
+    CHECK(backoff.ShouldRelieve(1347 * MiB));
+}
+
+void TestHeapReliefFollowsPartialRecovery() {
+    // A heap that recovers part of the way (still below the guard) is the new reference:
+    // falling back from there by 64 MiB is new pressure.
+    HeapReliefBackoff backoff;
+    CHECK(backoff.ShouldRelieve(1000 * MiB));
+    backoff.Relieved(1000 * MiB);
+    CHECK(!backoff.ShouldRelieve(1500 * MiB));
+    CHECK(!backoff.ShouldRelieve(1437 * MiB));
+    CHECK(backoff.ShouldRelieve(1436 * MiB));
+}
+
+void TestHeapReliefNearExhaustion() {
+    // Close to running out, every check relieves, as in b13: the heap can no longer
+    // fall a further step before allocations fail.
+    HeapReliefBackoff backoff;
+    CHECK(backoff.ShouldRelieve(60 * MiB));
+    backoff.Relieved(50 * MiB);
+    CHECK(backoff.ShouldRelieve(50 * MiB));
+    CHECK(backoff.ShouldRelieve(0));
+    backoff.Relieved(300 * MiB);
+    CHECK(backoff.ShouldRelieve(256 * MiB - 1));
+    backoff.Relieved(300 * MiB);
+    CHECK(!backoff.ShouldRelieve(256 * MiB));
+}
+
+void TestHeapReliefReset() {
+    // Once the heap is back above the guard, the next low check relieves at once.
+    HeapReliefBackoff backoff;
+    CHECK(backoff.ShouldRelieve(1400 * MiB));
+    backoff.Relieved(1400 * MiB);
+    CHECK(!backoff.ShouldRelieve(1400 * MiB));
+    backoff.Reset();
+    CHECK(backoff.ShouldRelieve(1400 * MiB));
+}
+
 } // namespace
 
 int main() {
     TestStaleQueueEntries();
     TestPruneDeadReferrers();
+    TestHeapReliefFirstCheck();
+    TestHeapReliefHeldUntilFurtherFall();
+    TestHeapReliefFollowsPartialRecovery();
+    TestHeapReliefNearExhaustion();
+    TestHeapReliefReset();
 
     // The heap-pressure trigger only fires with at least this many live blocks.
     constexpr std::size_t kTriggerFloor = 16384;

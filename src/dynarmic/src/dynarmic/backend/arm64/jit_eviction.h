@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 
 namespace Dynarmic::Backend::Arm64 {
 
@@ -31,6 +32,47 @@ constexpr std::size_t EvictBlockCount(std::size_t live_blocks) noexcept {
     const std::size_t quarter = live_blocks / 4;
     return quarter < MinToEvict ? MinToEvict : quarter;
 }
+
+/// Decides when the JIT drops code again for a heap that stays low.
+///
+/// Dropping blocks only helps if what it frees shows up as free heap. When it does not (the
+/// heap went to something else), repeating it on every check throws away the code the game
+/// runs and compiles it again, freeing nothing: b13 slowed Minecraft Dungeons 2 to 0.3 FPS
+/// with 119 such clears. So after a relief the JIT relieves the heap again only once it has
+/// fallen a further step from the highest it has been since, or once it is nearly exhausted.
+class HeapReliefBackoff {
+public:
+    /// Whether to drop code now, with `free_now` bytes of free heap below the guard. A check
+    /// that holds remembers a heap that has recovered part of the way.
+    constexpr bool ShouldRelieve(std::uint64_t free_now) noexcept {
+        if (!relieved || free_now < AlwaysRelieveBelow) {
+            return true;
+        }
+        if (free_now > reference) {
+            reference = free_now;
+        }
+        return reference - free_now >= RetryDrop;
+    }
+
+    /// Records the free heap right after a relief.
+    constexpr void Relieved(std::uint64_t free_after) noexcept {
+        relieved = true;
+        reference = free_after;
+    }
+
+    /// The heap is back above the guard: the next low check relieves at once.
+    constexpr void Reset() noexcept {
+        relieved = false;
+        reference = 0;
+    }
+
+private:
+    static constexpr std::uint64_t RetryDrop = 64ULL * 1024 * 1024;
+    static constexpr std::uint64_t AlwaysRelieveBelow = 256ULL * 1024 * 1024;
+
+    bool relieved = false;
+    std::uint64_t reference = 0;
+};
 
 /// Whether an entry of the emission queue still names the block that is alive at its
 /// location. A block that was invalidated, or invalidated and compiled again, leaves its

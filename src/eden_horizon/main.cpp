@@ -522,12 +522,13 @@ public:
         last_fallbacks = fallbacks;
         LOG_INFO(Frontend,
                  "Memory detail: page tables {} MiB, textures {} MiB, buffers {} MiB, JIT blocks {}, "
-                 "cache clears {} ({} for heap, {} blocks evicted first), warmed {} blocks in {} ms, "
-                 "{} textures evicted",
+                 "cache clears {} ({} for heap, {} blocks evicted first, {} low-heap checks held), "
+                 "warmed {} blocks in {} ms, {} textures evicted",
                  Common::SparseChunkBytesInUse() >> 20, eden_horizon_texture_bytes >> 20,
                  eden_horizon_buffer_bytes >> 20,
                  eden_horizon_jit_blocks, eden_horizon_jit_cache_clears,
                  eden_horizon_jit_heap_clears, eden_horizon_jit_partial_evictions,
+                 eden_horizon_jit_heap_holds,
                  eden_horizon_jit_warm_blocks, eden_horizon_jit_warm_micros / 1000,
                  eden_horizon_texture_evictions);
         last_count = count;

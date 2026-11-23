@@ -24,6 +24,7 @@
 #include "dynarmic/backend/arm64/fastmem.h"
 #ifdef __SWITCH__
 #    include "dynarmic/backend/arm64/horizon_code_block.h"
+#    include "dynarmic/backend/arm64/jit_eviction.h"
 #endif
 #include "dynarmic/interface/halt_reason.h"
 #include "dynarmic/ir/basic_block.h"
@@ -118,6 +119,8 @@ protected:
     /// Evictions since the last full clear; the clear is the fallback when they do not
     /// relieve the heap.
     unsigned evictions_since_clear = 0;
+    /// Holds back evictions and clears for heap that did not free any.
+    HeapReliefBackoff heap_relief;
 #endif
     const std::size_t code_cache_size;
 #ifdef __SWITCH__
