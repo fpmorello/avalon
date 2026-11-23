@@ -191,6 +191,51 @@ void TestOptions() {
     CHECK(out_of_range.GuardsIntact());
 }
 
+void TestOptionsScrollToSelectedValue() {
+    Screen off;
+    Screen on;
+    OptionsView view{"Game options", std::vector<OptionRow>(20, {"Local DLC", "Off"}), 19, ""};
+    DrawOptions(off.canvas(), view);
+    view.rows.back().value = "v0  DLC.nsp";
+    DrawOptions(on.canvas(), view);
+    CHECK(off.bytes != on.bytes);
+    CHECK(off.GuardsIntact() && on.GuardsIntact());
+}
+
+void TestLaunchError() {
+    Screen missing_keys;
+    Screen bad_package;
+    DrawLaunchError(missing_keys.canvas(), "Game.nsp", "Missing or outdated keys",
+                    "Check your own prod.keys and restart Avalon.", "Avalon error 0x0015");
+    DrawLaunchError(bad_package.canvas(), "Game.nsp", "Invalid game package",
+                    "Check the copy on the SD card.", "Avalon error 0x0012");
+    CHECK(missing_keys.GuardsIntact() && bad_package.GuardsIntact());
+    CHECK(missing_keys.bytes != bad_package.bytes);
+    CHECK(missing_keys.Busy(40, 668, 700, 710) > 100); // Back-to-list action
+    missing_keys.Save("launch_error");
+}
+
+void TestStartupFeedback() {
+    using Stage = StartupStage;
+    CHECK(StartupStatus({"Game", Stage::Open, 0, 0, 0}) == "Reading the game and local content.");
+    CHECK(StartupStatus({"Game", Stage::Initialize, 0, 0, 0}) == "Preparing the emulator.");
+    CHECK(StartupStatus({"Game", Stage::Shaders, 0, 0, 0}) == "Reading the shader cache.");
+    CHECK(StartupStatus({"Game", Stage::Shaders, 2, 8, 0}) == "Processed 2 / 8 cached pipelines.");
+    CHECK(StartupStatus({"Game", Stage::Shaders, 8, 8, 0}) == "Processed 8 / 8 cached pipelines.");
+    CHECK(StartupStatus({"Game", Stage::Shaders, 9, 8, 0}) == "Reading the shader cache.");
+    CHECK(StartupStatus({"Game", Stage::FirstFrame, 2, 8, 0}) == "No guest frame has been presented yet.");
+
+    Screen reading;
+    Screen processed;
+    Screen waiting;
+    DrawStartupScreen(reading.canvas(), {"Game", Stage::Shaders, 0, 0, 0});
+    DrawStartupScreen(processed.canvas(), {"Game", Stage::Shaders, 2, 8, 1});
+    DrawStartupScreen(waiting.canvas(), {"Game", Stage::FirstFrame, 0, 0, 0});
+    CHECK(reading.bytes != processed.bytes && processed.bytes != waiting.bytes);
+    CHECK(reading.GuardsIntact() && processed.GuardsIntact() && waiting.GuardsIntact());
+    waiting.Save("startup_waiting");
+}
+
 void TestTinyCanvasIsClipped() {
     // Everything clips to the canvas: a canvas smaller than the layout must not overflow.
     std::vector<std::uint8_t> bytes(200 * 100 * 4, 0);
@@ -208,6 +253,9 @@ int main() {
     TestPickerScrolled();
     TestPickerEmpty();
     TestOptions();
+    TestOptionsScrollToSelectedValue();
+    TestLaunchError();
+    TestStartupFeedback();
     TestTinyCanvasIsClipped();
     if (failures != 0) {
         std::printf("ui_render_test: %d check(s) failed\n", failures);

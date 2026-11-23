@@ -67,7 +67,47 @@ Known limits:
 4. Hold **+** and **−** together to leave the game. Avalon then starts again into the game
    list, unless "Return to the game list" is off.
 
-The log is written to `sdmc:/switch/avalon/.local/share/avalon/log/avalon_log.txt`.
+### Local updates and DLC
+
+For games in NSP, NSZ, XCI or XCZ containers, put your dumped `.nsp` or `.nsz` add-ons
+in `updates/` and `dlc/` beside the base game:
+
+```text
+sdmc:/games/
+├── My Game.xci
+├── updates/
+│   └── My Game Update.nsp
+└── dlc/
+    ├── My Game DLC 1.nsp
+    └── My Game DLC 2.nsz
+```
+
+Highlight the base game and press **Y**. Scroll to **Local update** and the **Local DLC**
+rows. Use **←/→** to select one update and any number of DLC titles, then **B** to save.
+Avalon matches package metadata to the game and ignores unrelated or unreadable add-ons.
+It reads the original files from the SD card, without installing them. If a selected file
+is moved, renamed or replaced with a different version, select it again. **No local update**
+and **Off** leave any separately installed or bundled content to the existing loader.
+
+### If a game does not open
+
+While starting, Avalon shows the current stage. If there are cached shaders to process,
+Avalon shows the actual number of cached pipelines processed. The waiting card stays
+until a guest frame replaces it; it does not declare the game hung. The log records
+whether Vulkan accepted a guest frame, even if the game drew a black frame.
+
+For a game the loader cannot open, Avalon shows the reason, a suggestion, and an error code.
+Press and release **A** to reopen the game list through the homebrew loader. If the loader
+cannot restart the app, Avalon explains that before asking you to close it. If you replace
+your own keys, restart Avalon before trying the game again. The folder for `prod.keys` and
+`title.keys` is
+`sdmc:/switch/avalon/.local/share/avalon/keys/`.
+
+This screen does not recover renderer failures, crashes, or hangs. Starting with b13,
+Avalon keeps the last ten launch logs per game in
+`sdmc:/switch/avalon/.local/share/avalon/log/games/`. Look for the latest `run-*.log` in
+the game's folder. The picker log, `avalon_log.txt`, also receives messages if the game
+log cannot be opened or reaches its size limit.
 
 To check the JIT's two-level page table lookup on your console, create an empty file
 `sdmc:/switch/avalon/test_pagetable.txt` and start the emulator. The file is removed, a

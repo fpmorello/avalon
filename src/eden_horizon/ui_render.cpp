@@ -496,18 +496,27 @@ void DrawOptions(const Canvas& canvas, const OptionsView& view) {
     DrawText(canvas, BodyFont(), 40, 112, view.title, Text, 660);
 
     constexpr int ListTop = 156, RowHeight = 42, ListLeft = 40, ListWidth = 660;
-    for (int row = 0; row < static_cast<int>(view.rows.size()); ++row) {
+    constexpr int VisibleRows = 11, ValueWidth = 350;
+    const int count = static_cast<int>(view.rows.size());
+    const int top = std::clamp(view.selected - VisibleRows + 1, 0, std::max(0, count - VisibleRows));
+    for (int row = top; row < std::min(count, top + VisibleRows); ++row) {
         const OptionRow& option = view.rows[static_cast<std::size_t>(row)];
-        const int y = ListTop + row * RowHeight;
+        const int y = ListTop + (row - top) * RowHeight;
         const bool selected = row == view.selected;
         if (selected) {
             FillRoundRect(canvas, ListLeft, y, ListWidth, RowHeight - 4, 10, Selection);
         }
         const int text_y = y + (RowHeight - 4 - SmallFont().line_height) / 2 - 1;
-        DrawText(canvas, SmallFont(), ListLeft + 18, text_y, option.label, selected ? Text : TextDim, 340);
         const std::string value = selected ? "<  " + option.value + "  >" : option.value;
-        const int vw = TextWidth(SmallFont(), value);
-        DrawText(canvas, SmallFont(), ListLeft + ListWidth - 18 - vw, text_y, value, selected ? AccentTeal : Text);
+        const int vw = std::min(ValueWidth, TextWidth(SmallFont(), value));
+        DrawText(canvas, SmallFont(), ListLeft + 18, text_y, option.label,
+                 selected ? Text : TextDim, ListWidth - vw - 50);
+        DrawText(canvas, SmallFont(), ListLeft + ListWidth - 18 - vw, text_y, value,
+                 selected ? AccentTeal : Text, ValueWidth);
+    }
+    if (count > VisibleRows && view.selected >= 0 && view.selected < count) {
+        const auto position = std::to_string(view.selected + 1) + " / " + std::to_string(count);
+        DrawText(canvas, SmallFont(), 695 - TextWidth(SmallFont(), position), 116, position, TextDim);
     }
 
     // Help for the selected option.
@@ -520,6 +529,78 @@ void DrawOptions(const Canvas& canvas, const OptionsView& view) {
     DrawHelp(canvas, PanelLeft + 22, PanelTop + 64, PanelWidth - 44, PanelTop + 440, view.help,
              TextDim);
     DrawFooter(canvas, {{"<>", "Change"}, {"A", "Next value"}, {"B", "Back"}});
+}
+
+std::string_view StartupTitle(StartupStage stage) {
+    switch (stage) {
+    case StartupStage::Open:
+        return "Opening game";
+    case StartupStage::Initialize:
+        return "Initializing emulator";
+    case StartupStage::Shaders:
+        return "Loading shaders";
+    case StartupStage::FirstFrame:
+        return "Waiting for the first picture";
+    }
+    return "Starting game";
+}
+
+std::string StartupStatus(const StartupView& view) {
+    switch (view.stage) {
+    case StartupStage::Open:
+        return "Reading the game and local content.";
+    case StartupStage::Initialize:
+        return "Preparing the emulator.";
+    case StartupStage::Shaders:
+        if (view.total > 0 && view.processed <= view.total) {
+            return "Processed " + std::to_string(view.processed) + " / " +
+                   std::to_string(view.total) + " cached pipelines.";
+        }
+        return "Reading the shader cache.";
+    case StartupStage::FirstFrame:
+        return "No guest frame has been presented yet.";
+    }
+    return {};
+}
+
+static void DrawStartup(const Canvas& canvas, const StartupView& view, int left, int top) {
+    FillRect(canvas, left, top, StartupCardWidth, StartupCardHeight, BackgroundLow);
+    FillRect(canvas, left, top, 5, StartupCardHeight, AccentTeal);
+    DrawText(canvas, BodyFont(), left + 28, top + 24, StartupTitle(view.stage), Text,
+             StartupCardWidth - 56);
+    DrawText(canvas, SmallFont(), left + 28, top + 65, view.game, TextDim, StartupCardWidth - 56);
+    DrawText(canvas, SmallFont(), left + 28, top + 95, StartupStatus(view), Text,
+             StartupCardWidth - 56);
+    if (view.stage == StartupStage::Shaders) {
+        for (unsigned i = 0; i < 4; ++i) {
+            FillCircle(canvas, left + 33 + 16 * static_cast<int>(i), top + 142, 4,
+                       i == view.pulse % 4 ? AccentTeal : TextDim);
+        }
+    }
+}
+
+void DrawStartupCard(const Canvas& canvas, const StartupView& view) {
+    DrawStartup(canvas, view, 0, 0);
+}
+
+void DrawStartupScreen(const Canvas& canvas, const StartupView& view) {
+    Background_(canvas);
+    DrawHeader(canvas, "Starting game");
+    DrawStartup(canvas, view, (canvas.width - StartupCardWidth) / 2,
+                (canvas.height - StartupCardHeight) / 2);
+}
+
+void DrawLaunchError(const Canvas& canvas, std::string_view game, std::string_view reason,
+                     std::string_view hint, std::string_view code, std::string_view action) {
+    Background_(canvas);
+    DrawHeader(canvas, "Could not start game");
+    constexpr int Left = 172, Top = 177, Width = 936, Height = 345;
+    FillRoundRect(canvas, Left, Top, Width, Height, 18, Panel);
+    DrawText(canvas, TitleFont(), Left + 36, Top + 32, reason, Text, Width - 72);
+    DrawText(canvas, BodyFont(), Left + 36, Top + 94, game, TextDim, Width - 72);
+    DrawHelp(canvas, Left + 36, Top + 160, Width - 72, Top + 272, hint, Text);
+    DrawText(canvas, SmallFont(), Left + 36, Top + 290, code, TextDim, Width - 72);
+    DrawFooter(canvas, {{"A", action}});
 }
 
 } // namespace UiRender

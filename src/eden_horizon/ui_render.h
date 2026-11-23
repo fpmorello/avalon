@@ -6,8 +6,10 @@
 // Avalon's menu screens, drawn in software into an RGBA buffer (odd/tasks/b4-ui.md, T2).
 // No platform code: the NRO hands it a framebuffer, the host preview test a plain buffer.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace UiImage {
@@ -55,6 +57,24 @@ struct OptionsView {
     std::string help; ///< Of the selected row; '\n' breaks lines
 };
 
+enum class StartupStage { Open, Initialize, Shaders, FirstFrame };
+
+struct StartupView {
+    std::string_view game;
+    StartupStage stage;
+    std::size_t processed = 0;
+    std::size_t total = 0;
+    unsigned pulse = 0;
+};
+
+constexpr int StartupCardWidth = 644;
+constexpr int StartupCardHeight = 180;
+
+std::string_view StartupTitle(StartupStage stage);
+std::string StartupStatus(const StartupView& view);
+void DrawStartupCard(const Canvas& canvas, const StartupView& view);
+void DrawStartupScreen(const Canvas& canvas, const StartupView& view);
+
 /// Items that fit in the picker's list.
 constexpr int PickerVisibleRows = 9;
 
@@ -63,5 +83,8 @@ void SetBuildLabel(std::string label);
 
 void DrawPicker(const Canvas& canvas, const PickerView& view);
 void DrawOptions(const Canvas& canvas, const OptionsView& view);
+void DrawLaunchError(const Canvas& canvas, std::string_view game, std::string_view reason,
+                     std::string_view hint, std::string_view code,
+                     std::string_view action = "Back to game list");
 
 } // namespace UiRender

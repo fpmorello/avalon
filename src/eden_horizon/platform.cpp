@@ -317,6 +317,8 @@ private:
 };
 
 MenuScreen menu_screen;
+enum class StartupScreen { Closed, Framebuffer, Console };
+StartupScreen startup_screen = StartupScreen::Closed;
 
 /// The cover of the game under the cursor, decoded once per game.
 class CoverCache {
@@ -484,16 +486,22 @@ void DrawText(const std::string& folder, const std::vector<Entry>& entries, int 
 void DrawOptionsText(const std::vector<MenuOption>& options, int selected, const std::string& title) {
     std::printf("\x1b[2J\x1b[1;1H");
     std::printf("\x1b[1mAvalon %s\x1b[0m - %.60s\n\n\n", EDEN_HORIZON_BUILD_ID, title.c_str());
-    for (int row = 0; row < static_cast<int>(options.size()); ++row) {
+    constexpr int OptionsRows = 15;
+    const int count = static_cast<int>(options.size());
+    const int top = std::clamp(selected - OptionsRows + 1, 0, std::max(0, count - OptionsRows));
+    for (int row = top; row < std::min(count, top + OptionsRows); ++row) {
         const MenuOption& option = options[static_cast<std::size_t>(row)];
         const char* const choice = option.choices[static_cast<std::size_t>(option.selected)].c_str();
         if (row == selected) {
-            std::printf("\x1b[7m> %-28s < %s >\x1b[0m\n", option.label.c_str(), choice);
+            std::printf("\x1b[7m> %-28s < %.39s >\x1b[0m\n", option.label.c_str(), choice);
         } else {
-            std::printf("  %-28s   %s\n", option.label.c_str(), choice);
+            std::printf("  %-28s   %.39s\n", option.label.c_str(), choice);
         }
     }
-    if (selected < static_cast<int>(options.size())) {
+    if (count > OptionsRows) {
+        std::printf("\x1b[20;1H%d / %d", selected + 1, count);
+    }
+    if (selected < count) {
         std::printf("\x1b[22;1H%s", options[static_cast<std::size_t>(selected)].help.c_str());
     }
     std::printf("\x1b[44;1HUp/Down: move   Left/Right: change   B: back");
@@ -586,6 +594,77 @@ bool RunOptionsScreen(std::vector<MenuOption>& options, const std::string& title
 
 bool EditOptions(std::vector<MenuOption>& options, const std::string& title) {
     return RunOptionsScreen(options, title);
+}
+
+void ShowStartupScreen(const UiRender::StartupView& view) {
+    if (startup_screen == StartupScreen::Closed) {
+        if (menu_screen.Open()) {
+            startup_screen = StartupScreen::Framebuffer;
+        } else {
+            consoleInit(nullptr);
+            startup_screen = StartupScreen::Console;
+        }
+    }
+    if (startup_screen == StartupScreen::Framebuffer) {
+        menu_screen.Present([&](const UiRender::Canvas& canvas) {
+            UiRender::DrawStartupScreen(canvas, view);
+        });
+    } else {
+        std::printf("\x1b[2J\x1b[1;1HAvalon\n\n%s\n\n%.76s\n%s\n",
+                    std::string{UiRender::StartupTitle(view.stage)}.c_str(),
+                    std::string{view.game}.c_str(), UiRender::StartupStatus(view).c_str());
+        consoleUpdate(nullptr);
+    }
+}
+
+void CloseStartupScreen() {
+    if (startup_screen == StartupScreen::Framebuffer) {
+        menu_screen.Close();
+    } else if (startup_screen == StartupScreen::Console) {
+        consoleExit(nullptr);
+    }
+    startup_screen = StartupScreen::Closed;
+}
+
+bool AcknowledgeLaunchError(std::string_view game, std::string_view reason,
+                            std::string_view hint, std::string_view code, std::string_view action) {
+    const bool graphical = menu_screen.Open();
+    if (graphical) {
+        menu_screen.Present([&](const UiRender::Canvas& canvas) {
+            UiRender::DrawLaunchError(canvas, game, reason, hint, code, action);
+        });
+    } else {
+        consoleInit(nullptr);
+        std::printf("\x1b[2J\x1b[1;1HCould not start game\n\n%.76s\n\n%s\n%s\n\n%s\n\nA: %s\n",
+                    std::string{game}.c_str(), std::string{reason}.c_str(),
+                    std::string{hint}.c_str(), std::string{code}.c_str(), std::string{action}.c_str());
+        consoleUpdate(nullptr);
+    }
+
+    InitializeInput();
+    bool ready = false;
+    bool pressed = false;
+    bool acknowledged = false;
+    while (appletMainLoop()) {
+        padUpdate(&pad);
+        const bool down = (padGetButtons(&pad) & HidNpadButton_A) != 0;
+        if (!down) {
+            if (pressed) {
+                acknowledged = true;
+                break;
+            }
+            ready = true;
+        } else if (ready) {
+            pressed = true;
+        }
+        IdleFrame();
+    }
+    if (graphical) {
+        menu_screen.Close();
+    } else {
+        consoleExit(nullptr);
+    }
+    return acknowledged;
 }
 
 std::string BrowseForGame(std::vector<MenuOption>& options,

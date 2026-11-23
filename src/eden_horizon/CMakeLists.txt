@@ -5,6 +5,10 @@
 string(APPEND CMAKE_CXX_STANDARD_LIBRARIES " -ldav1d -lz")
 
 add_executable(eden-horizon
+    game_content.cpp
+    game_content.h
+    game_content_policy.h
+    launch_error.h
     main.cpp
     pagetable_selftest.cpp
     pagetable_selftest.h
@@ -12,6 +16,7 @@ add_executable(eden-horizon
     platform.h
     profiler.cpp
     profiler.h
+    startup_present.h
     ui_image.cpp
     ui_image.h
     ui_render.cpp
@@ -46,6 +51,21 @@ nx_create_nro(eden-horizon
     OUTPUT ${CMAKE_BINARY_DIR}/bin/avalon.nro
     ICON ${CMAKE_CURRENT_SOURCE_DIR}/ui_assets/icon.jpg
     NACP avalon.nacp)
+
+add_executable(avalon-clock-probe EXCLUDE_FROM_ALL
+    clock_probe.cpp clock_probe.h clock_probe_main.cpp)
+target_link_libraries(avalon-clock-probe PRIVATE common)
+
+nx_generate_nacp(
+    OUTPUT avalon-clock-probe.nacp
+    NAME "Avalon Clock Probe"
+    AUTHOR "Eden Emulator Project"
+    VERSION "0.1.0")
+
+nx_create_nro(avalon-clock-probe
+    OUTPUT ${CMAKE_BINARY_DIR}/bin/avalon-clock-probe.nro
+    NACP avalon-clock-probe.nacp)
+set_target_properties(avalon-clock-probe_nro PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ui_render.cpp embeds the generated assets (#embed): rebuild it when they change.
 set_property(SOURCE ui_render.cpp APPEND PROPERTY OBJECT_DEPENDS

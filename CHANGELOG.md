@@ -4,6 +4,43 @@ Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on 
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 
+## b13 — Per-game launch logs
+
+- Keep up to ten launch logs per game, including failed launches, under the Avalon log
+  directory. Returning to the picker no longer rotates away game logs.
+
+## b12 — 2026-11-22 (local experiment)
+
+- **Async presentation**: optional Vulkan presentation worker on Switch 2, off by default.
+  Use **Y** in the game picker to compare modes per game. Both modes wait for in-flight
+  GPU work before replacing the swapchain. No performance gain has been verified on hardware.
+
+## b11 — 2026-11-22
+
+- **ARM64 compatibility**: handle indexed FP16 `FCMLA` through scalar half-precision
+  fused multiply-add on Switch 2. This targets the Dynarmic crash seen when starting
+  Super Mario Bros. Wonder with its local update. Gameplay on hardware is not yet verified.
+
+## b10 — 2026-11-22
+
+- **Startup feedback**: Avalon shows opening and initialization stages, counts processed
+  cached shader pipelines, and shows a waiting card until a guest frame replaces it.
+  The log distinguishes waiting for a frame from Vulkan accepting one for presentation.
+
+## b9 — 2026-11-22
+
+- **Recoverable launch errors**: when the loader rejects a game, Avalon shows the reason,
+  a next step and an error code. Press and release **A** to reopen the game list through
+  a supported homebrew loader. If restart is unavailable, Avalon explains why before closing.
+  Renderer failures, crashes and hangs are not handled by this screen.
+
+## b8 — 2026-11-22
+
+- **Local game updates and DLC**: press **Y** on a game to choose one update and any
+  number of DLC titles from `.nsp` and `.nsz` packages in the adjacent `updates/` and
+  `dlc/` folders. Avalon matches package metadata and loads the selection from the SD
+  card without installing it. This follows the eden-nx2 adoption plan.
+
 ## b7 — 2026-11-22 (`sw2-fork-b7`)
 
 Branch `feat/b7-nsz`. First item of the eden-nx2 adoption plan

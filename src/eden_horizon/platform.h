@@ -6,7 +6,12 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace UiRender {
+struct StartupView;
+}
 
 // libnx access for the frontend. <switch.h> declares global names that collide with
 // Eden's (Service, Result, Event...), so it is only included in platform.cpp.
@@ -100,6 +105,16 @@ struct MenuOption {
 /// Shows `options` under `title` until the user leaves the screen, changing them in place.
 /// Returns false if the applet must exit.
 bool EditOptions(std::vector<MenuOption>& options, const std::string& title);
+
+/// Boot screen on the default window; close it before Vulkan takes ownership.
+void ShowStartupScreen(const UiRender::StartupView& view);
+void CloseStartupScreen();
+
+/// Show a handled launch error after emulation has released the window.
+/// Returns true when A was pressed and released, false when the applet must exit.
+bool AcknowledgeLaunchError(std::string_view game, std::string_view reason,
+                            std::string_view hint, std::string_view code,
+                            std::string_view action = "Back to game list");
 
 /// Text-mode file picker over the SD card, shown before the emulator owns the screen.
 /// Lists folders and game files, starting in the folder last used.

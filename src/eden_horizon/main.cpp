@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
@@ -16,6 +18,7 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <system_error>
 #include <tuple>
@@ -28,6 +31,7 @@
 #include "common/horizon/stats.h"
 #include "common/fs/path_util.h"
 #include "common/logging.h"
+#include "common/overlay_panels.h"
 #include "common/sparse_large_vector.h"
 #include "common/scm_rev.h"
 #include "common/settings.h"
@@ -41,10 +45,14 @@
 #include "core/hle/service/filesystem/filesystem.h"
 #include "core/loader/loader.h"
 #include "core/perf_stats.h"
+#include "eden_horizon/game_content.h"
+#include "eden_horizon/launch_error.h"
 #include "eden_horizon/pagetable_selftest.h"
 #include "eden_horizon/platform.h"
 #include "eden_horizon/profiler.h"
+#include "eden_horizon/startup_present.h"
 #include "eden_horizon/status_overlay.h"
+#include "eden_horizon/ui_render.h"
 #include "eden_horizon/version.h"
 #include "hid_core/frontend/emulated_controller.h"
 #include "hid_core/hid_core.h"
@@ -78,12 +86,26 @@ public:
     }
 
     std::unique_ptr<Core::Frontend::GraphicsContext> CreateSharedContext() const override {
+        // CreateGPU calls this before creating the Vulkan surface on the same window.
+        std::call_once(window_handoff, Platform::CloseStartupScreen);
         return std::make_unique<DummyContext>();
     }
 
     bool IsShown() const override {
         return true;
     }
+
+    void OnGuestFramePresented() override {
+        guest_presented.store(true, std::memory_order_relaxed);
+    }
+
+    bool HasGuestPresentation() const {
+        return guest_presented.load(std::memory_order_relaxed);
+    }
+
+private:
+    mutable std::once_flag window_handoff;
+    std::atomic_bool guest_presented{};
 };
 
 void ApplyHostDefaults() {
@@ -160,6 +182,10 @@ std::vector<Platform::MenuOption> DefaultOptions() {
         {"shader_cache", "Shader cache on disk",
          "Keeps compiled shaders between sessions, so they stutter only once.",
          {"on", "off"}, 0},
+        {"async_presentation", "Async presentation",
+         "Experimental. Moves Vulkan presentation to a separate thread. Leave off unless testing.\n"
+         "Change it with Y for one game and relaunch to compare.",
+         {"off", "on"}, 0, true},
         {"return_to_list", "Return to the game list",
          "After leaving a game with + and -, Avalon starts again and shows the game list,\n"
          "instead of going back to the homebrew menu. It restarts as a fresh program, so a\n"
@@ -274,7 +300,7 @@ void EditGameOptions(const std::vector<Platform::MenuOption>& general,
     for (auto& option : options) {
         option.choices[0] = std::string{Inherit} + " (" + OptionValue(general, option.key) + ")";
     }
-    Platform::EditOptions(options, "options for " + GameName(game_path) + " only");
+    GameContent::EditOptions(options, "options for " + GameName(game_path) + " only", game_path);
     for (auto& option : options) {
         option.choices[0] = Inherit;
     }
@@ -345,6 +371,8 @@ void ApplyOptions(const std::vector<Platform::MenuOption>& options) {
             LOG_INFO(Frontend, "CPU boost requested, result {:#x}", Platform::SetCpuBoost(true));
         } else if (option.key == "shader_cache") {
             Settings::values.use_disk_shader_cache.SetValue(choice == "on");
+        } else if (option.key == "async_presentation") {
+            Settings::values.async_presentation.SetValue(choice == "on");
         }
         LOG_INFO(Frontend, "Option {}: {}", option.key, choice);
     }
@@ -448,6 +476,7 @@ void LogStage(const char* stage) {
     const Platform::MemoryStats memory = Platform::GetMemoryStats();
     LOG_INFO(Frontend, "Stage: {} (memory {} / {} MiB)", stage, memory.used >> 20,
              memory.total >> 20);
+    Common::Log::Stop();
 }
 
 /// Samples the game's speed about once a second for the on-screen status, and logs
@@ -574,6 +603,226 @@ struct MotionPeaks {
     bool seen{};
 };
 
+bool PresentStartupCard(VideoCore::RendererBase& renderer, const UiRender::StartupView& view) {
+    auto& panel = Common::GetOverlayPanel(Common::OverlayPanelId::Players);
+    {
+        std::scoped_lock lock{panel.mutex};
+        panel.width = UiRender::StartupCardWidth;
+        panel.height = UiRender::StartupCardHeight;
+        panel.pixels.resize(std::size_t{panel.width} * panel.height * 4);
+        UiRender::DrawStartupCard({panel.pixels.data(), static_cast<int>(panel.width),
+                                   static_cast<int>(panel.height), static_cast<int>(panel.width * 4)},
+                                  view);
+        panel.enabled = true;
+        ++panel.version;
+    }
+    return renderer.PresentStartupFrame();
+}
+
+Core::SystemResultStatus RunGame(const std::string& game_path,
+                                const std::vector<Platform::MenuOption>& options,
+                                const std::string& nro_path) {
+    LOG_INFO(Frontend, "Booting {}", game_path);
+    const auto filename = std::filesystem::path{game_path}.filename().string();
+    auto emu_window = std::make_unique<EmuWindowHorizon>();
+    using Stage = UiRender::StartupStage;
+    Platform::ShowStartupScreen({filename, Stage::Initialize});
+    if (OptionIs(options, "jit_cache", "on")) {
+        // Named after the game file: the cores' JITs are made before the title is known.
+        const std::string name = GameName(game_path);
+        mkdir("sdmc:/switch/avalon/jit", 0777);
+        std::snprintf(eden_horizon_jit_cache_prefix, sizeof(eden_horizon_jit_cache_prefix),
+                      "sdmc:/switch/avalon/jit/%.60s_%s", name.c_str(),
+                      OptionValue(options, "address_space").c_str());
+    }
+    // Tuning aid: a number in this file replaces how far the JIT compiles ahead.
+    if (std::ifstream ahead{"sdmc:/switch/avalon/jit_ahead.txt"}; ahead) {
+        int blocks = 0;
+        if (ahead >> blocks && blocks >= 0 && blocks <= 64) {
+            eden_horizon_jit_blocks_ahead = blocks;
+        }
+    }
+    LOG_INFO(Frontend, "JIT cache '{}', {} blocks ahead", eden_horizon_jit_cache_prefix,
+             eden_horizon_jit_blocks_ahead);
+    LogStage("create system");
+
+    // Local NCA files hold non-owning references to the filesystem.
+    auto filesystem = std::make_shared<FileSys::RealVfsFilesystem>();
+    GameContent::LaunchProvider launch_content;
+    auto system = std::make_unique<Core::System>();
+    auto input_subsystem = std::make_unique<InputCommon::InputSubsystem>();
+    LogStage("initialize system");
+    system->Initialize();
+    system->ApplySettings();
+    LogStage("initialize input");
+    input_subsystem->Initialize();
+    system->HIDCore().ReloadInputDevices();
+    LogStage("create filesystem");
+    Platform::ShowStartupScreen({filename, Stage::Open});
+    system->SetContentProvider(std::make_unique<FileSys::ContentProviderUnion>());
+    system->SetFilesystem(filesystem);
+    system->GetFileSystemController().CreateFactories(*filesystem);
+    launch_content.Register(filesystem, game_path, system->GetContentProviderUnion());
+    system->GetUserChannel().clear();
+
+    Service::AM::FrontendAppletParameters load_parameters{
+        .applet_id = Service::AM::AppletId::Application,
+    };
+    LogStage("load game");
+    const Core::SystemResultStatus load_result =
+        system->Load(*emu_window, game_path, load_parameters);
+    // Early rejections never reach the Vulkan handoff.
+    Platform::CloseStartupScreen();
+    // Input engines must outlive the emulated controllers' callbacks.
+    const auto release_frontend = [&] {
+        system->HIDCore().UnloadInputDevices();
+        emu_window.reset();
+        system.reset();
+        input_subsystem->Shutdown();
+    };
+    if (load_result != Core::SystemResultStatus::Success) {
+        const auto message = LaunchError::Describe(load_result);
+        LOG_ERROR(Frontend, "Failed to load {}: status {:#06x} ({})", game_path,
+                  static_cast<u32>(load_result), message.title);
+        if (message.recovery == LaunchError::Recovery::None) {
+            Common::Log::Stop();
+            Platform::ExitProcess();
+        }
+        Platform::SetCpuBoost(false);
+        if (message.recovery == LaunchError::Recovery::NeedsShutdown) {
+            system->ShutdownMainProcess();
+        }
+        release_frontend();
+        return load_result;
+    }
+
+    auto& renderer = system->Renderer();
+    if (Settings::values.use_disk_shader_cache.GetValue()) {
+        LogStage("load shader cache");
+        PresentStartupCard(renderer, {filename, Stage::Shaders});
+        unsigned pulse = 0;
+        // Horizon's Vulkan cache reports on this caller after releasing its worker lock.
+        renderer.ReadRasterizer()->LoadDiskResources(
+            system->GetApplicationProcessProgramID(), std::stop_token{},
+            [&](VideoCore::LoadCallbackStage stage, std::size_t processed, std::size_t total) {
+                if (stage == VideoCore::LoadCallbackStage::Build && total != 0) {
+                    PresentStartupCard(renderer, {filename, Stage::Shaders, processed, total, ++pulse});
+                }
+            });
+    }
+    if (!Startup::PresentWaitingCard([&] {
+            return PresentStartupCard(renderer, {filename, Stage::FirstFrame});
+        })) {
+        LOG_WARNING(Frontend, "Vulkan rejected both startup waiting cards; starting the game anyway");
+    }
+    // If accepted, the host-only image remains on screen until a guest frame replaces it.
+    // Stop drawing the panel before starting the guest GPU to keep it out of gameplay.
+    StatusOverlay::Show({});
+    LogStage("start GPU");
+    system->GPU().Start();
+    system->GetCpuManager().OnGpuReady();
+    system->RegisterExitCallback([] {});
+    LogStage("run");
+    {
+        std::string sizes;
+        const int count = std::min(eden_horizon_large_mmap_count, 64);
+        for (int i = 0; i < count; ++i) {
+            sizes += std::format(" {}", eden_horizon_large_mmaps[i] >> 20);
+        }
+        LOG_INFO(Frontend, "Large mappings so far, in MiB:{}", sizes);
+    }
+    const auto run_started = std::chrono::steady_clock::now();
+    void(system->Run());
+    LogStage("running");
+
+    Platform::InitializeInput();
+    Platform::PadSnapshot pad{};
+    Platform::PadSnapshot previous_pad{};
+    {
+        VibrationForwarder vibration{system->HIDCore()};
+        MotionPeaks motion_peaks;
+        PerformanceMonitor performance{*system, OptionIs(options, "show_fps", "on"),
+                                       OptionIs(options, "show_mode", "on")
+                                           ? StatusLine(options)
+                                           : std::string{}};
+        if (OptionIs(options, "profiler", "on")) {
+            Profiler::Start();
+        }
+        u32 iterations = 0;
+        bool logged_first_frame = false;
+        bool logged_frame_wait = false;
+        while (Platform::PumpEvents(pad)) {
+            if (!logged_first_frame) {
+                const auto elapsed = std::chrono::steady_clock::now() - run_started;
+                if (emu_window->HasGuestPresentation()) {
+                    LOG_INFO(Frontend, "First guest frame accepted by Vulkan after {} ms",
+                             std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+                    logged_first_frame = true;
+                } else if (!logged_frame_wait && elapsed >= std::chrono::seconds{8}) {
+                    LOG_INFO(Frontend, "Still waiting for first guest frame after 8 seconds");
+                    logged_frame_wait = true;
+                }
+            }
+            ForwardPad(*input_subsystem->GetVirtualGamepad(), pad, previous_pad);
+            vibration.Update();
+            motion_peaks.Add(pad);
+            // Roughly every 10 seconds: memory is the scarce resource on this host.
+            ++iterations;
+            if (iterations % 250 == 0) {
+                performance.Sample();
+            }
+            if (iterations % 2500 == 0) {
+                LogStage(logged_first_frame ? "playing" : "waiting for first frame");
+                motion_peaks.LogAndReset();
+                LogProfile();
+                Common::Log::Stop(); // Flush the performance window while the game is still running.
+            }
+        }
+    }
+
+    Profiler::Stop();
+    LogStage("shut down");
+    Platform::SetCpuBoost(false);
+    system->Pause();
+    LOG_INFO(Frontend, "JIT cache: saved {} blocks", eden_horizon_jit_save_caches());
+    system->ShutdownMainProcess();
+    release_frontend();
+    LOG_INFO(Frontend, "Shut down cleanly");
+    if (OptionIs(options, "return_to_list", "on") && Platform::QuitByUser() && !nro_path.empty()) {
+        const bool relaunch = Platform::RequestRelaunch(nro_path);
+        LOG_INFO(Frontend, "Return to the game list: {}",
+                 relaunch ? "relaunching" : "not supported by the loader");
+    }
+    return Core::SystemResultStatus::Success;
+}
+
+void ShowLaunchFailure(const std::string& game_path, const std::string& nro_path,
+                       Core::SystemResultStatus result) {
+    const auto message = LaunchError::Describe(result);
+    const auto status = LaunchError::DecodeLoaderStatus(result);
+    const auto detail = status ? Loader::GetResultStatusString(*status) : std::string{};
+    if (!detail.empty()) {
+        LOG_ERROR(Frontend, "Loader reason for {}: {}", game_path, detail);
+    }
+    Common::Log::Stop();
+
+    const auto code = std::format("Avalon error {:#06x}", static_cast<u32>(result));
+    const auto filename = std::filesystem::path{game_path}.filename().string();
+    const std::string_view hint = message.hint.empty() ? std::string_view{detail} : message.hint;
+    if (!Platform::AcknowledgeLaunchError(filename, message.title, hint, code)) {
+        return;
+    }
+
+    // The kernel and host TLS are not safe to reuse in place.
+    if (!Platform::RequestRelaunch(nro_path)) {
+        LOG_WARNING(Frontend, "Homebrew loader could not reopen the game list");
+        Platform::AcknowledgeLaunchError(
+            filename, "Could not reopen the game list",
+            "The homebrew loader did not accept a restart. Open Avalon again from the homebrew menu.",
+            code, "Close Avalon");
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -597,148 +846,28 @@ int main(int argc, char** argv) {
     LOG_INFO(Frontend, "Eden {} | {}-{} (Horizon host)", std::string_view{Common::g_build_name},
              std::string_view{Common::g_scm_branch}, std::string_view{Common::g_scm_desc});
 
-    std::vector<Platform::MenuOption> options = DefaultOptions();
+    auto options = DefaultOptions();
     LoadOptions(options);
+    const std::string nro_path = argc > 0 ? argv[0] : "";
     const std::string game_path =
         argc > 1 ? argv[1]
                  : Platform::BrowseForGame(options, [&options](const std::string& path) {
                        EditGameOptions(options, path);
                    });
     SaveOptions(options);
-    if (!game_path.empty()) {
-        options = EffectiveOptions(std::move(options), game_path);
-    }
-    ApplyOptions(options);
     if (game_path.empty()) {
         LOG_INFO(Frontend, "No game chosen");
+    } else {
+        Common::Log::BeginGameLog(GameName(game_path), game_path);
+        LOG_INFO(Frontend, "{}", EDEN_HORIZON_VERSION);
+        LOG_INFO(Frontend, "Selected game: {}", game_path);
         Common::Log::Stop();
-        return 0;
-    }
-    LOG_INFO(Frontend, "Booting {}", game_path);
-    if (OptionIs(options, "jit_cache", "on")) {
-        // Named after the game file: the cores' JITs are made before the title is known.
-        const std::string name = GameName(game_path);
-        mkdir("sdmc:/switch/avalon/jit", 0777);
-        std::snprintf(eden_horizon_jit_cache_prefix, sizeof(eden_horizon_jit_cache_prefix),
-                      "sdmc:/switch/avalon/jit/%.60s_%s", name.c_str(),
-                      OptionValue(options, "address_space").c_str());
-    }
-    // Tuning aid: a number in this file replaces how far the JIT compiles ahead.
-    if (std::ifstream ahead{"sdmc:/switch/avalon/jit_ahead.txt"}; ahead) {
-        int blocks = 0;
-        if (ahead >> blocks && blocks >= 0 && blocks <= 64) {
-            eden_horizon_jit_blocks_ahead = blocks;
+        const auto effective_options = EffectiveOptions(options, game_path);
+        ApplyOptions(effective_options);
+        const auto result = RunGame(game_path, effective_options, nro_path);
+        if (result != Core::SystemResultStatus::Success) {
+            ShowLaunchFailure(game_path, nro_path, result);
         }
-    }
-    LOG_INFO(Frontend, "JIT cache '{}', {} blocks ahead", eden_horizon_jit_cache_prefix,
-             eden_horizon_jit_blocks_ahead);
-    LogStage("create system");
-
-    auto system = std::make_unique<Core::System>();
-    auto input_subsystem = std::make_unique<InputCommon::InputSubsystem>();
-    LogStage("initialize system");
-    system->Initialize();
-    system->ApplySettings();
-    LogStage("initialize input");
-    input_subsystem->Initialize();
-    system->HIDCore().ReloadInputDevices();
-    LogStage("create filesystem");
-
-    auto emu_window = std::make_unique<EmuWindowHorizon>();
-
-    system->SetContentProvider(std::make_unique<FileSys::ContentProviderUnion>());
-    system->SetFilesystem(std::make_shared<FileSys::RealVfsFilesystem>());
-    system->GetFileSystemController().CreateFactories(*system->GetFilesystem());
-    system->GetUserChannel().clear();
-
-    Service::AM::FrontendAppletParameters load_parameters{
-        .applet_id = Service::AM::AppletId::Application,
-    };
-    LogStage("load game");
-    const Core::SystemResultStatus load_result =
-        system->Load(*emu_window, game_path, load_parameters);
-    if (load_result != Core::SystemResultStatus::Success) {
-        LOG_CRITICAL(Frontend, "Failed to load {}: status {}", game_path,
-                     static_cast<u32>(load_result));
-        if (OptionIs(options, "return_to_list", "on") && argc > 0) {
-            const bool relaunch = Platform::RequestRelaunch(argv[0]);
-            LOG_INFO(Frontend, "Return to the game list after the failure: {}",
-                     relaunch ? "relaunching" : "not supported by the loader");
-        }
-        Common::Log::Stop();
-        // The system already started host threads; see Platform::ExitProcess.
-        Platform::ExitProcess();
-    }
-
-    LogStage("start GPU");
-    system->GPU().Start();
-    system->GetCpuManager().OnGpuReady();
-    if (Settings::values.use_disk_shader_cache.GetValue()) {
-        LogStage("load shader cache");
-        system->Renderer().ReadRasterizer()->LoadDiskResources(
-            system->GetApplicationProcessProgramID(), std::stop_token{},
-            [](VideoCore::LoadCallbackStage, size_t, size_t) {});
-    }
-    system->RegisterExitCallback([] {});
-    LogStage("run");
-    {
-        std::string sizes;
-        const int count = std::min(eden_horizon_large_mmap_count, 64);
-        for (int i = 0; i < count; ++i) {
-            sizes += std::format(" {}", eden_horizon_large_mmaps[i] >> 20);
-        }
-        LOG_INFO(Frontend, "Large mappings so far, in MiB:{}", sizes);
-    }
-    void(system->Run());
-    LogStage("running");
-
-    Platform::InitializeInput();
-    Platform::PadSnapshot pad{};
-    Platform::PadSnapshot previous_pad{};
-    {
-        VibrationForwarder vibration{system->HIDCore()};
-        MotionPeaks motion_peaks;
-        PerformanceMonitor performance{*system, OptionIs(options, "show_fps", "on"),
-                                       OptionIs(options, "show_mode", "on")
-                                           ? StatusLine(options)
-                                           : std::string{}};
-        if (OptionIs(options, "profiler", "on")) {
-            Profiler::Start();
-        }
-        u32 iterations = 0;
-        while (Platform::PumpEvents(pad)) {
-            ForwardPad(*input_subsystem->GetVirtualGamepad(), pad, previous_pad);
-            vibration.Update();
-            motion_peaks.Add(pad);
-            // Roughly every 10 seconds: memory is the scarce resource on this host.
-            ++iterations;
-            if (iterations % 250 == 0) {
-                performance.Sample();
-            }
-            if (iterations % 2500 == 0) {
-                LogStage("playing");
-                motion_peaks.LogAndReset();
-                LogProfile();
-            }
-        }
-    }
-
-    Profiler::Stop();
-    LogStage("shut down");
-    Platform::SetCpuBoost(false);
-    system->Pause();
-    LOG_INFO(Frontend, "JIT cache: saved {} blocks", eden_horizon_jit_save_caches());
-    system->ShutdownMainProcess();
-    // The emulated controllers hold callbacks into the input engines: release them first.
-    system->HIDCore().UnloadInputDevices();
-    emu_window.reset();
-    system.reset();
-    input_subsystem->Shutdown();
-    LOG_INFO(Frontend, "Shut down cleanly");
-    if (OptionIs(options, "return_to_list", "on") && Platform::QuitByUser() && argc > 0) {
-        const bool relaunch = Platform::RequestRelaunch(argv[0]);
-        LOG_INFO(Frontend, "Return to the game list: {}",
-                 relaunch ? "relaunching" : "not supported by the loader");
     }
     Common::Log::Stop();
     return 0;
