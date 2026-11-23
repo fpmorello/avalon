@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <type_traits>
 #include <format>
+#ifdef __SWITCH2__
+#include <string_view>
+#endif
 #include "common/swap.h"
 
 // adapted from https://github.com/fmtlib/fmt/issues/2704
@@ -128,6 +131,10 @@ struct Filter {
 
 /// Initializes the logging system. This should be the first thing called in main.
 void Initialize();
+#ifdef __SWITCH2__
+/// Redirect file logging for the rest of this process after a game is selected.
+void BeginGameLog(std::string_view label, std::string_view game_path);
+#endif
 
 void Start();
 

@@ -35,6 +35,10 @@
 #include "common/thread.h"
 
 #include "common/logging.h"
+#ifdef __SWITCH2__
+#include <mutex>
+#include "common/horizon/game_logs.h"
+#endif
 #include "common/settings.h"
 #include "common/string_util.h"
 #include "common/bounded_threadsafe_queue.h"
@@ -262,10 +266,16 @@ struct FileBackend final : public Backend {
     }
     ~FileBackend() noexcept override = default;
 
-    void Write(const Entry& entry) noexcept override {
-        if (!enabled)
-            return;
+#ifdef __SWITCH2__
+    std::filesystem::path BeginGame(std::string_view label, std::string_view game_path) {
+        const std::scoped_lock lock{game_mutex};
+        auto path = game_log.Begin(FS::GetEdenPath(FS::EdenPath::LogDir) / "games", label, game_path);
+        game_active |= !path.empty();
+        return path;
+    }
+#endif
 
+    void Write(const Entry& entry) noexcept override {
         auto message = FormatLogMessage(entry);
 #ifndef __ANDROID__
         if (Settings::values.censor_username.GetValue()) {
@@ -284,6 +294,18 @@ struct FileBackend final : public Backend {
                 boost::replace_all(message, username, "user");
         }
 #endif
+#ifdef __SWITCH2__
+        {
+            const std::scoped_lock lock{game_mutex};
+            const bool flush = entry.log_level >= Level::Error ||
+                               Settings::values.log_flush_line.GetValue();
+            if (game_active && game_log.Write(message) && (!flush || game_log.Flush())) {
+                return;
+            }
+        }
+#endif
+        if (!enabled)
+            return;
         bytes_written += file->WriteSpan(std::span<const char>{message.begin(), message.end()});
 
         // Option to log each line rather than 4k buffers
@@ -304,9 +326,20 @@ struct FileBackend final : public Backend {
     }
 
     void Flush() noexcept override {
+#ifdef __SWITCH2__
+        {
+            const std::scoped_lock lock{game_mutex};
+            game_log.Flush();
+        }
+#endif
         file->Flush();
     }
 private:
+#ifdef __SWITCH2__
+    std::mutex game_mutex;
+    GameLogs game_log;
+    bool game_active{};
+#endif
     std::optional<FS::IOFile> file;
     std::size_t bytes_written = 0;
     bool enabled = true;
@@ -416,6 +449,20 @@ void Initialize() {
 #endif
     }
 }
+
+#ifdef __SWITCH2__
+void BeginGameLog(std::string_view label, std::string_view game_path) {
+    if (!logging_instance || !logging_instance->file_backend) {
+        return;
+    }
+    const auto path = logging_instance->file_backend->BeginGame(label, game_path);
+    if (path.empty()) {
+        LOG_WARNING(Log, "Could not open a game log; using the startup log");
+    } else {
+        LOG_INFO(Log, "Game log: {}", path.string());
+    }
+}
+#endif
 
 void Start() {
 }
