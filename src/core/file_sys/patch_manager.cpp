@@ -211,7 +211,11 @@ VirtualDir PatchManager::PatchExeFS(VirtualDir exefs) const {
     const auto* content_union = static_cast<const ContentProviderUnion*>(&content_provider);
     const auto update_tid = GetUpdateTitleID(title_id);
 
-    if (content_union) {
+    const auto* launch = content_union ? content_union->GetLaunchProvider(update_tid) : nullptr;
+    if (launch) {
+        update_disabled = false;
+        checked_manual = true;
+    } else if (content_union) {
         // First, check ExternalContentProvider
         const auto* external_provider = content_union->GetExternalProvider();
         if (external_provider) {
@@ -625,7 +629,12 @@ VirtualFile PatchManager::PatchRomFS(const NCA* base_nca, VirtualFile base_romfs
     bool checked_manual = false;
 
     const auto* content_union = static_cast<const ContentProviderUnion*>(&content_provider);
-    if (content_union) {
+    const auto* launch = content_union ? content_union->GetLaunchProvider(update_tid) : nullptr;
+    if (launch) {
+        update_disabled = false;
+        checked_manual = true;
+        update_raw = launch->GetEntryRaw(update_tid, type);
+    } else if (content_union) {
         // First, check ExternalContentProvider
         const auto* external_provider = content_union->GetExternalProvider();
         if (external_provider) {
@@ -712,7 +721,7 @@ VirtualFile PatchManager::PatchRomFS(const NCA* base_nca, VirtualFile base_romfs
                      FormatTitleVersion(content_provider.GetEntryVersion(update_tid).value_or(0)));
             romfs = new_nca->GetRomFS();
         }
-    } else if (!update_disabled && packed_update_raw != nullptr && base_nca != nullptr) {
+    } else if (!launch && !update_disabled && packed_update_raw != nullptr && base_nca != nullptr) {
         const auto new_nca = std::make_shared<NCA>(packed_update_raw, base_nca);
         if (new_nca->GetStatus() == Loader::ResultStatus::Success &&
             new_nca->GetRomFS() != nullptr) {

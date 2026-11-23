@@ -104,7 +104,7 @@ static std::string GetCNMTName(TitleType type, u64 title_id) {
     return std::format("{}_{:016x}.cnmt", TITLE_TYPE_NAMES[index], title_id);
 }
 
-static std::shared_ptr<NSP> OpenContainerAsNsp(const VirtualFile& file, Loader::FileType type) {
+std::shared_ptr<NSP> OpenContainerAsNsp(const VirtualFile& file, Loader::FileType type) {
     if (!file) {
         return nullptr;
     }
@@ -1129,6 +1129,16 @@ void ContentProviderUnion::SetSlot(ContentProviderUnionSlot slot, ContentProvide
     providers[size_t(slot)] = provider;
 }
 
+void ContentProviderUnion::PinLaunchTitle(u64 title_id) {
+    pinned_launch_titles.push_back(title_id);
+}
+
+const ContentProvider* ContentProviderUnion::GetLaunchProvider(u64 title_id) const {
+    const auto it = std::ranges::find(pinned_launch_titles, title_id);
+    return it != pinned_launch_titles.end() ? GetSlotProvider(ContentProviderUnionSlot::FrontendManual)
+                                            : nullptr;
+}
+
 void ContentProviderUnion::Refresh() {
     for (auto e : providers)
         if (e != nullptr)
@@ -1136,6 +1146,9 @@ void ContentProviderUnion::Refresh() {
 }
 
 bool ContentProviderUnion::HasEntry(u64 title_id, ContentRecordType type) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->HasEntry(title_id, type);
+    }
     for (auto const e : providers)
         if (e && e->HasEntry(title_id, type))
             return true;
@@ -1143,6 +1156,9 @@ bool ContentProviderUnion::HasEntry(u64 title_id, ContentRecordType type) const 
 }
 
 std::optional<u32> ContentProviderUnion::GetEntryVersion(u64 title_id) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->GetEntryVersion(title_id);
+    }
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1153,6 +1169,9 @@ std::optional<u32> ContentProviderUnion::GetEntryVersion(u64 title_id) const {
 }
 
 VirtualFile ContentProviderUnion::GetEntryUnparsed(u64 title_id, ContentRecordType type) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->GetEntryUnparsed(title_id, type);
+    }
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1163,6 +1182,9 @@ VirtualFile ContentProviderUnion::GetEntryUnparsed(u64 title_id, ContentRecordTy
 }
 
 VirtualFile ContentProviderUnion::GetEntryRaw(u64 title_id, ContentRecordType type) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->GetEntryRaw(title_id, type);
+    }
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1173,6 +1195,9 @@ VirtualFile ContentProviderUnion::GetEntryRaw(u64 title_id, ContentRecordType ty
 }
 
 std::unique_ptr<NCA> ContentProviderUnion::GetEntry(u64 title_id, ContentRecordType type) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->GetEntry(title_id, type);
+    }
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1187,7 +1212,10 @@ std::vector<ContentProviderEntry> ContentProviderUnion::ListEntriesFilter(std::o
     for (auto const& e : providers) {
         if (e != nullptr) {
             auto const vec = e->ListEntriesFilter(title_type, record_type, title_id);
-            std::copy(vec.begin(), vec.end(), std::back_inserter(out));
+            std::ranges::copy_if(vec, std::back_inserter(out), [this, e](const auto& entry) {
+                const auto* pinned = GetLaunchProvider(entry.title_id);
+                return !pinned || pinned == e;
+            });
         }
     }
     std::sort(out.begin(), out.end());
@@ -1205,9 +1233,11 @@ std::vector<std::pair<ContentProviderUnionSlot, ContentProviderEntry>> ContentPr
         if (origin.has_value() && *origin != ContentProviderUnionSlot(i))
             continue;
         auto const vec = e->ListEntriesFilter(title_type, record_type, title_id);
-        std::transform(vec.begin(), vec.end(), std::back_inserter(out), [i](const ContentProviderEntry& entry) {
-            return std::make_pair(ContentProviderUnionSlot(i), entry);
-        });
+        for (const auto& entry : vec) {
+            if (const auto* pinned = GetLaunchProvider(entry.title_id); !pinned || pinned == e) {
+                out.emplace_back(ContentProviderUnionSlot(i), entry);
+            }
+        }
     }
 
     std::sort(out.begin(), out.end());
@@ -1216,6 +1246,10 @@ std::vector<std::pair<ContentProviderUnionSlot, ContentProviderEntry>> ContentPr
 }
 
 std::optional<ContentProviderUnionSlot> ContentProviderUnion::GetSlotForEntry(u64 title_id, ContentRecordType type) const {
+    if (const auto* launch = GetLaunchProvider(title_id)) {
+        return launch->HasEntry(title_id, type) ? std::optional{ContentProviderUnionSlot::FrontendManual}
+                                                : std::nullopt;
+    }
     for (size_t i = 0; i < providers.size(); ++i) {
         auto const& e = providers[i];
         if (e != nullptr && e->HasEntry(title_id, type))

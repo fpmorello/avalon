@@ -19,6 +19,10 @@
 #include "core/file_sys/vfs/vfs.h"
 #include "core/file_sys/nca_metadata.h"
 
+namespace Loader {
+enum class FileType;
+}
+
 namespace FileSys {
 class ExternalContentProvider;
 class CNMT;
@@ -59,6 +63,9 @@ struct ExternalUpdateEntry {
     std::string version_string;
     std::array<VirtualFile, size_t(ContentRecordType::Count)> files;
 };
+
+// Opens an NSP-like package, using the secure partition for XCI containers.
+std::shared_ptr<NSP> OpenContainerAsNsp(const VirtualFile& file, Loader::FileType type);
 
 constexpr u64 GetUpdateTitleID(u64 base_title_id) {
     return base_title_id | 0x800;
@@ -233,6 +240,9 @@ public:
     ~ContentProviderUnion() override;
 
     void SetSlot(ContentProviderUnionSlot slot, ContentProvider* provider);
+    // Pin a title to FrontendManual for this launch, including absent records.
+    void PinLaunchTitle(u64 title_id);
+    const ContentProvider* GetLaunchProvider(u64 title_id) const;
     void Refresh() override;
     bool HasEntry(u64 title_id, ContentRecordType type) const override;
     std::optional<u32> GetEntryVersion(u64 title_id) const override;
@@ -255,7 +265,8 @@ public:
 
     std::optional<ContentProviderUnionSlot> GetSlotForEntry(u64 title_id, ContentRecordType type) const;
 private:
-    std::array<ContentProvider*, size_t(ContentProviderUnionSlot::Count)> providers;
+    std::array<ContentProvider*, size_t(ContentProviderUnionSlot::Count)> providers{};
+    std::vector<u64> pinned_launch_titles;
 };
 
 class ManualContentProvider : public ContentProvider {
