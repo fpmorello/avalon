@@ -18,6 +18,54 @@
 using namespace Dynarmic;
 using namespace oaknut::util;
 
+#ifdef __SWITCH2__
+TEST_CASE("A64: indexed FP16 FCMLA", "[a64][fp16]") {
+    using Vector = A64::Vector;
+    constexpr Vector lhs{0x4400420040003c00, 0x4800470046004500};
+    constexpr Vector accumulator{0x4d0049004d004900, 0x4d0049004d004900};
+    constexpr Vector rhs8{0x57e057d057c057b0, 0x42004000580057f0};
+    constexpr Vector rhs4{0x4200400057c057b0, 0x58105808580057f0};
+    struct Case {
+        u32 instruction;
+        Vector vd;
+        Vector vn;
+        Vector vm;
+        Vector result;
+    };
+    constexpr Case cases[] = {
+        {0x6f721820, accumulator, lhs, rhs8, {0x4f404c004dc04a00, 0x51204e0050604d00}},
+        {0x6f723820, accumulator, lhs, rhs8, {0x4f00c0004e004400, 0x5080cb005000c800}},
+        {0x6f725820, accumulator, lhs, rhs8, {0x498044004c404800, 0xbc00c40045000000}},
+        {0x6f727820, accumulator, lhs, rhs8, {0x4a004d804c004c00, 0x4400504048004f00}},
+        {0x2f723020, accumulator, lhs, rhs4, {0x4f00c0004e004400, 0}},
+        {0x2f401020, {0x4500440042004000, 0}, {0x0000400000003c00, 0}, {},
+         {0x4980480046004400, 0}}, // Vd == Vm; later lanes use the original indexed pair.
+        // -1 + (1 + 2^-10) * (1 - 2^-10) needs fused rounding to return -2^-20.
+        {0x2f521020, {0xbc00, 0}, {0x3c01, 0}, {0x3bfe, 0}, {0x8010, 0}},
+    };
+    A64TestEnv env;
+    A64::UserConfig config{};
+    config.callbacks = &env;
+    A64::Jit jit{config};
+    for (const auto& c : cases) {
+        CAPTURE(c.instruction);
+        const auto pc = static_cast<u64>(env.code_mem.size()) * 4;
+        env.code_mem.emplace_back(c.instruction);
+        env.code_mem.emplace_back(0x14000000); // B .
+        jit.SetFpcr(0);
+        jit.SetFpsr(0);
+        jit.SetVector(0, c.vd);
+        jit.SetVector(1, c.vn);
+        jit.SetVector(18, c.vm);
+        jit.SetPC(pc);
+        env.ticks_left = 2;
+        CheckedRun([&]() { jit.Run(); });
+        REQUIRE(jit.GetVector(0) == c.result);
+        REQUIRE(jit.GetFpsr() == 0);
+    }
+}
+#endif
+
 TEST_CASE("A64: ADD", "[a64]") {
     A64TestEnv env;
     A64::UserConfig jit_user_config{};

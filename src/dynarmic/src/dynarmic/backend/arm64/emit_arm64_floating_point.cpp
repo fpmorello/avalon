@@ -12,6 +12,7 @@
 #include "dynarmic/backend/arm64/abi.h"
 #include "dynarmic/backend/arm64/emit_arm64.h"
 #include "dynarmic/backend/arm64/emit_context.h"
+#include "dynarmic/backend/arm64/fp16_encoding.h"
 #include "dynarmic/backend/arm64/fpsr_manager.h"
 #include "dynarmic/backend/arm64/reg_alloc.h"
 #include "dynarmic/common/fp/fpcr.h"
@@ -313,10 +314,16 @@ void EmitIR<IR::Opcode::FPMul64>(oaknut::CodeGenerator& code, EmitContext& ctx, 
 
 template<>
 void EmitIR<IR::Opcode::FPMulAdd16>(oaknut::CodeGenerator& code, EmitContext& ctx, IR::Inst* inst) {
+#ifdef __SWITCH2__
+    EmitFourOp<16>(code, ctx, inst, [&](auto& result, auto& addend, auto& lhs, auto& rhs) {
+        code.dw(EncodeFMADD16(result->index(), lhs->index(), rhs->index(), addend->index()));
+    });
+#else
     (void)code;
     (void)ctx;
     (void)inst;
     UNREACHABLE();
+#endif
 }
 
 template<>
@@ -359,10 +366,18 @@ void EmitIR<IR::Opcode::FPMulX64>(oaknut::CodeGenerator& code, EmitContext& ctx,
 
 template<>
 void EmitIR<IR::Opcode::FPNeg16>(oaknut::CodeGenerator& code, EmitContext& ctx, IR::Inst* inst) {
+#ifdef __SWITCH2__
+    auto args = ctx.reg_alloc.GetArgumentInfo(inst);
+    auto operand = ctx.reg_alloc.ReadW(args[0]);
+    auto result = ctx.reg_alloc.WriteW(inst);
+    RegAlloc::Realize(operand, result);
+    code.EOR(result, operand, 0x8000);
+#else
     (void)code;
     (void)ctx;
     (void)inst;
     UNREACHABLE();
+#endif
 }
 
 template<>
