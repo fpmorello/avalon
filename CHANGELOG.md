@@ -1,6 +1,6 @@
-# Changelog — Switch 2 fork builds
+# Changelog — Avalon builds
 
-Fork builds of the Switch 2 port are identified by a build id (`b<N>`) shown on the
+Avalon builds are identified by a build id (`b<N>`) shown on the
 options screen header, logged at startup and written to `crash.txt`. Each build's commit
 is tagged `sw2-fork-b<N>`, so `git describe` names the exact source of a binary.
 

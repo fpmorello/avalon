@@ -1,4 +1,5 @@
 <!--
+# SPDX-FileCopyrightText: Copyright 2026 Avalon contributors
 # SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -7,20 +8,22 @@
 -->
 <!-- lang: en-GB -->
 
-# Eden on Switch 2 — proof of concept
+# Avalon
 
-> **This is an unofficial, experimental proof of concept. It is unstable.**
-> It has improved a lot, but expect crashes, hangs, stutter and missing graphics.
-> It is not affiliated with or supported by the Eden project: please do **not** report
-> problems with this port to Eden. Use this repository's issues instead.
+Avalon is an experimental Switch 1 emulator for Switch 2 homebrew, run under kaiHEN and
+built with [ounce-devkit](https://github.com/ouncebrew/ounce-devkit) (libounce, OunceVK
+and libkaihen).
 
-A port of the [Eden](https://git.eden-emu.dev/eden-emu/eden) Switch 1 emulator to Switch 2
-homebrew, built with [ounce-devkit](https://github.com/ouncebrew/ounce-devkit) (libounce,
-OunceVK and libkaihen) and run under kaiHEN. It is based on Eden commit `d85bad8`; the
-original README follows below.
+> **Avalon is unofficial and unstable.** Expect crashes, hangs, stutter and missing
+> graphics. It is not affiliated with or supported by Eden or Nintendo: report problems
+> in [this repository's issues](https://github.com/fpmorello/avalon/issues), never to Eden.
 
-*Español: prueba de concepto no oficial de Eden para homebrew de Switch 2. Sigue siendo
-inestable, aunque ya mejoró bastante. No reportes fallos de este port al proyecto Eden.*
+*Español: emulador experimental de Switch 1 para homebrew de Switch 2. Es inestable. No
+reportes fallos de Avalon al proyecto Eden; usá los issues de este repositorio.*
+
+Avalon is a fork of [Eden](https://git.eden-emu.dev/eden-emu/eden) (commit `d85bad8`),
+started from [Olmectron's Switch 2 proof of concept](https://github.com/Olmectron/eden-switch2-poc).
+The emulator core, JIT and renderer come from Eden and, before it, yuzu.
 
 ## State
 
@@ -31,6 +34,9 @@ inestable, aunque ya mejoró bastante. No reportes fallos de este port al proyec
 | Super Mario 3D World + Bowser's Fury | Plays near 60 fps with occasional drops; only tested for a few minutes |
 | Mario Strikers: Battle League | Unreliable: needs *Address space* `game` or `full` (`full` is the default); some starts get past the intro and play at 60 fps, others stay on a black screen |
 | Kirby and the Forgotten Land | Starts and plays, but drops to 15-20 fps inside levels |
+| Little Racer | Plays, but averages about 14 fps in races |
+| Super Mario Bros. Wonder (v1.2.1) | Exits to the HOME menu during startup |
+| Minecraft (v1.1.3.0) | Reaches the intro, then shows a black picture |
 
 Nothing else has been tested.
 
@@ -120,97 +126,39 @@ No games, keys or firmware are included, and none will be provided.
 
 ## Building
 
-On Windows with MSYS2 and devkitPro's ounce-devkit packages installed:
+Install devkitPro with the ounce-devkit packages (libounce, ouncevk, libkaihen), the
+portlibs `switch-libzstd switch-libopus switch-enet switch-ffmpeg switch-lz4`, and
+`glslangValidator` on the host. Then, on Linux or on Windows with MSYS2:
 
 ```sh
+export DEVKITPRO=/opt/devkitpro
 sh tools/switch2/configure.sh
-sh tools/switch2/build.sh eden-horizon_nro
+sh tools/switch2/build.sh -j 6 eden-horizon_nro
 ```
 
-The result is `build/switch2/bin/avalon.nro`. The port's own code is in `src/eden_horizon`
+The result is `build/switch2/bin/avalon.nro`. Avalon's own code is in `src/eden_horizon`
 and `src/common/horizon`; the rest are changes guarded by `__SWITCH__` or `HORIZON_HOST`.
+Host tests are in `tools/switch2/tests`: `sh tools/switch2/tests/run.sh <test name>` runs one
+C++ test (for example `game_logs_test`), and `python3 -m unittest discover tools/switch2/tests`
+runs the Python ones.
 
-This port was written with the help of an AI coding assistant.
+- [CHANGELOG.md](CHANGELOG.md): what each build (`b<N>`, tagged `sw2-fork-b<N>`) changed.
+- [docs/Switch2Performance.md](docs/Switch2Performance.md): how to measure FPS and compare runs.
+- [odd/](odd): design notes and task records.
 
----
+The rest of `docs/` is Eden's documentation for the shared emulator core.
 
-<h1 align="center">
-  <br>
-  <a href="https://git.eden-emu.dev/eden-emu/eden"><img src="./dist/qt_themes/default/icons/256x256/eden.png" alt="Eden" width="200"></a>
-  <br>
-  <b>Eden</b>
-  <br>
-</h1>
-
-<h4 align="center"><b>Eden</b> is a free and open-source (FOSS) Switch 1 emulator started by developer Camille LaVey.
-<br>
-Written in C++, with builds for Windows, Linux, macOS, Android, FreeBSD and more.
-</h4>
-
-<p align="center">
-    </a>
-    <a href="https://discord.gg/HstXbPch7X">
-        <img src="https://img.shields.io/discord/1367654015269339267?color=5865F2&label=Eden&logo=discord&logoColor=white"
-            alt="Discord">
-    </a>
-    <a href="https://stt.gg/qKgFEAbH">
-        <img src="https://img.shields.io/revolt/invite/qKgFEAbH?color=d61f3a&label=Stoat"
-            alt="Stoat">
-    </a>
-</p>
-
-<p align="center">
-  <a href="#compatibility">Compatibility</a> |
-  <a href="#contribute">Contribute</a> |
-  <a href="#building">Building</a> |
-  <a href="#download">Download</a> |
-  <a href="#license">License</a>
-</p>
-
-## Compatibility
-
-The emulator is capable of running most commercial games at full speed, provided you meet the necessary hardware requirements.
-
-A list of supported games will be available in future. Please be patient.
-
-Check out our [website](https://eden-emu.dev) for the latest news on exciting features, monthly progress reports, and more!
-
-[![Packaging status](https://repology.org/badge/vertical-allrepos/eden-emulator.svg)](https://repology.org/project/eden-emulator/versions)
-
-## Contribute
-
-To contribute to Eden; be it financially, code, bug reports, or otherwise, see our [Contributing guidelines](./CONTRIBUTING.md).
-
-## Documentation
-
-We have a user manual! See our [User Handbook](./docs/user/README.md).
-
-## Building
-
-See the [General Build Guide](docs/Build.md)
-
-For information on provided development tooling, see the [Tools directory](./tools)
-
-## Download
-
-You can download the latest releases from [our release page](https://git.eden-emu.dev/eden-emu/eden/releases).
-
-Save us some bandwidth! We have [mirrors available](./docs/user/ThirdParty.md#mirrors) as well.
+Avalon was written with the help of AI coding assistants.
 
 ## License
 
-Eden is licensed under the GPLv3 (or any later version). Refer to the [LICENSE.txt](https://git.eden-emu.dev/eden-emu/eden/src/branch/master/LICENSE.txt) file.
+Avalon is licensed under the GPLv3 or any later version, as Eden is. See
+[LICENSE.txt](LICENSE.txt) and [LICENSES/](LICENSES). Files keep their original copyright
+notices.
 
-## Special thanks
+## Thanks
 
-Super special thanks to Cloudflare for preventing the git server from blowing up.
-
-- Yuzu
-- Ryujinx
-- Sudachi
-- Citron
-- Torzu
-- Suyu
-- Ryubing
-
-And everyone who continues or had contributed to the project! <3
+- [Eden](https://git.eden-emu.dev/eden-emu/eden) and the projects it builds on: yuzu,
+  Ryujinx, Sudachi, Citron, Torzu, Suyu and Ryubing.
+- [Olmectron](https://github.com/Olmectron) for the original Switch 2 proof of concept.
+- [ounce-devkit](https://github.com/ouncebrew/ounce-devkit) and kaiHEN.
